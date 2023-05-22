@@ -26,11 +26,12 @@ document_types = {
     }
 }
 
+#list of active permitters
 permitters = {
-    0:["Mark Rainey","mark.rainey"],
-    1:["Katie Smith", "katiem.smith"],
-    2:["Sarila Mickle", "sarila.mickle"],
-    3:["Autumn Nitz", "autumn.nitz"]
+    0:["Mark ***","mark.***"],
+    1:["Katie ***", "katiem.***"],
+    2:["Sarila ***", "sarila.***"],
+    3:["Autumn ***", "autumn.***"]
 }
 
 # Main Configuration
