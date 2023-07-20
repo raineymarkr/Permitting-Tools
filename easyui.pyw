@@ -1,9 +1,12 @@
 import tkinter as tk
+from tkinter import filedialog
 import ttkbootstrap as ttk
 import datetime
 import subprocess
 from docx.shared import Cm
-from docxtpl import DocxTemplate
+from docx.shared import Inches
+from docxtpl import DocxTemplate, InlineImage
+from docx import Document
 from PIL import ImageTk, Image
 from pdf2image import convert_from_path
 
@@ -89,6 +92,19 @@ def display_pdf(pdf_path):
     canvas.img = img  # Store the reference to the image object
     canvas.create_image(0, 0, anchor=ttk.NW, image=img)
 
+def delete_previous_word(event):
+    widget = event.widget
+    current_text = widget.get()
+    current_index = widget.index(tk.INSERT)
+    
+    # Find the start index of the previous word
+    start_index = current_index - 1
+    while start_index >= 0 and not current_text[start_index].isspace():
+        start_index -= 1
+    
+    # Delete the previous word
+    widget.delete(start_index + 1, current_index)
+
 #BEGIN PNOT WINDOW
 def open_pnotinput_window():
     global pnot1
@@ -111,9 +127,11 @@ def open_pnotinput_window():
     acamp_label = ttk.Label(left_frame, text="ACAMP Number:")
     acamp_label.pack(padx=text_padding, pady=text_padding)
     acamp = ttk.Entry(left_frame)
+    acamp.bind("<Control-BackSpace>", delete_previous_word)
     acamp.pack(padx=text_padding, pady=text_padding)
 
     sam = ttk.Entry(left_frame)
+    sam.bind("<Control-BackSpace>", delete_previous_word)
 
     if pnottype != "BSSE" and pnottype != "FAA" and pnottype != "OCS" :
         sam_label = ttk.Label(left_frame, text="SAM Number:")
@@ -124,30 +142,34 @@ def open_pnotinput_window():
     project_name_label = ttk.Label(left_frame, text="Project Name:")
     project_name_label.pack(padx=text_padding, pady=text_padding)
     project_name = ttk.Entry(left_frame)
+    project_name.bind("<Control-BackSpace>", delete_previous_word)
     project_name.pack(padx=text_padding, pady=text_padding)
 
     address_label = ttk.Label(left_frame, text="Project Address/Location:")
     address_label.pack(padx=text_padding, pady=text_padding)
     project_location = ttk.Entry(left_frame)
     project_location.pack(padx=text_padding, pady=text_padding)
+    project_location.bind("<Control-BackSpace>", delete_previous_word)
 
     projectcity_label = ttk.Label(left_frame, text="Project City:")
     projectcity_label.pack(padx=text_padding, pady=text_padding)
     project_city = ttk.Entry(left_frame)
     project_city.pack(padx=text_padding, pady=text_padding)
+    project_city.bind("<Control-BackSpace>", delete_previous_word)
 
     projectcounty_label = ttk.Label(left_frame, text="Project County:")
     projectcounty_label.pack(padx=text_padding, pady=text_padding)
     project_county = ttk.Entry(left_frame)
     project_county.pack(padx=text_padding, pady=text_padding)
+    project_county.bind("<Control-BackSpace>", delete_previous_word)
 
     variancecodes_label = ttk.Label(left_frame, text="Variance Codes:")
-    
     var_code = ttk.Entry(left_frame)
+    var_code.bind("<Control-BackSpace>", delete_previous_word)
 
     parcelid_label = ttk.Label(left_frame, text="Parcel ID:")
-    
     parcel_id = ttk.Entry(left_frame)
+    parcel_id.bind("<Control-BackSpace>", delete_previous_word)
 
     if pnottype == "VAR":        
         variancecodes_label.pack(padx=text_padding, pady=text_padding)
@@ -156,6 +178,7 @@ def open_pnotinput_window():
         var_code.pack(padx=text_padding, pady=text_padding)
 
     federal_agency = ttk.Entry(left_frame)
+    federal_agency.bind("<Control-BackSpace>", delete_previous_word)
     
     if pnottype == "FAA":
         fedagency_label = ttk.Label(left_frame, text="Federal Agency:")
@@ -341,107 +364,129 @@ def open_perminput_window():
     acamp_label = ttk.Label(middle_frame, text="ACAMP Number:")
     acamp_label.pack(padx=text_padding, pady=text_padding)
     acamp = ttk.Entry(middle_frame)
+    acamp.bind("<Control-BackSpace>", delete_previous_word)
     acamp.pack(padx=text_padding, pady=text_padding)
 
     sam_label = ttk.Label(middle_frame, text="SAM Number:")
     sam_label.pack(padx=text_padding, pady=text_padding)
     sam = ttk.Entry(middle_frame)
+    sam.bind("<Control-BackSpace>", delete_previous_word)
     sam.pack(padx=text_padding, pady=text_padding)
 
     honorific_label = ttk.Label(left_frame, text="Honorific:")
     honorific_label.pack(padx=text_padding, pady=text_padding)
     honorific = ttk.Entry(left_frame)
+    honorific.bind("<Control-BackSpace>", delete_previous_word)
     honorific.pack(padx=text_padding, pady=text_padding)
 
     first_name_label = ttk.Label(left_frame, text="First Name:")
     first_name_label.pack(padx=text_padding, pady=text_padding)
     first_name = ttk.Entry(left_frame)
+    first_name.bind("<Control-BackSpace>", delete_previous_word)
     first_name.pack(padx=text_padding, pady=text_padding)
 
     last_name_label = ttk.Label(left_frame, text="Last Name:")
     last_name_label.pack(padx=text_padding, pady=text_padding)
     last_name = ttk.Entry(left_frame)
+    last_name.bind("<Control-BackSpace>", delete_previous_word)
     last_name.pack(padx=text_padding, pady=text_padding)
 
     title_label = ttk.Label(left_frame, text="Title:")
     title_label.pack(padx=text_padding, pady=text_padding)
     title = ttk.Entry(left_frame)
+    title.bind("<Control-BackSpace>", delete_previous_word)
     title.pack(padx=text_padding, pady=text_padding)
 
     address_label = ttk.Label(left_frame, text="Applicant Address:")
     address_label.pack(padx=text_padding, pady=text_padding)
     address = ttk.Entry(left_frame)
+    address.bind("<Control-BackSpace>", delete_previous_word)
     address.pack(padx=text_padding, pady=text_padding)
 
     agent_name_label = ttk.Label(left_frame, text="Agent Full Name:")
     agent_name_label.pack(padx=text_padding, pady=text_padding)
     agent_name = ttk.Entry(left_frame)
+    agent_name.bind("<Control-BackSpace>", delete_previous_word)
     agent_name.pack(padx=text_padding, pady=text_padding)
 
     agent_address_label = ttk.Label(left_frame, text="Agent Address:")
     agent_address_label.pack(padx=text_padding, pady=text_padding)
     agent_address = ttk.Entry(left_frame)
+    agent_address.bind("<Control-BackSpace>", delete_previous_word)
     agent_address.pack(padx=text_padding, pady=text_padding)
 
     city_label = ttk.Label(left_frame, text="City:")
     city_label.pack(padx=text_padding, pady=text_padding)
     city = ttk.Entry(left_frame)
+    city.bind("<Control-BackSpace>", delete_previous_word)
     city.pack(padx=text_padding, pady=text_padding)
 
     state_label = ttk.Label(left_frame, text="State:")
     state_label.pack(padx=text_padding, pady=text_padding)
     state = ttk.Entry(left_frame)
+    state.bind("<Control-BackSpace>", delete_previous_word)
     state.pack(padx=text_padding, pady=text_padding)
 
     zip_code_label = ttk.Label(left_frame, text="Zip Code:")
     zip_code_label.pack(padx=text_padding, pady=text_padding)
     zip_code = ttk.Entry(left_frame)
+    zip_code.bind("<Control-BackSpace>", delete_previous_word)
     zip_code.pack(padx=text_padding, pady=text_padding)
 
     project_name_label = ttk.Label(middle_frame, text="Project Name:")
     project_name_label.pack(padx=text_padding, pady=text_padding)
     project_name = ttk.Entry(middle_frame)
+    project_name.bind("<Control-BackSpace>", delete_previous_word)
     project_name.pack(padx=text_padding, pady=text_padding)
 
     project_city_label = ttk.Label(middle_frame, text="Project City:")
     project_city_label.pack(padx=text_padding, pady=text_padding)
     project_city = ttk.Entry(middle_frame)
+    project_city.bind("<Control-BackSpace>", delete_previous_word)
     project_city.pack(padx=text_padding, pady=text_padding)
 
     project_county_label = ttk.Label(middle_frame, text="Project County:")
     project_county_label.pack(padx=text_padding, pady=text_padding)
     project_county = ttk.Entry(middle_frame)
+    project_county.bind("<Control-BackSpace>", delete_previous_word)
     project_county.pack(padx=text_padding, pady=text_padding)
 
     parcel_id_label = ttk.Label(middle_frame, text="Parcel ID:")
     parcel_id_label.pack(padx=text_padding, pady=text_padding)
     parcel_id = ttk.Entry(middle_frame)
+    parcel_id.bind("<Control-BackSpace>", delete_previous_word)
     parcel_id.pack(padx=text_padding, pady=text_padding)
 
     prefile_date_label = ttk.Label(middle_frame, text="Prefile Date:")
     prefile_date_label.pack(padx=text_padding, pady=text_padding)
     prefile_date = ttk.Entry(middle_frame)
+    prefile_date.bind("<Control-BackSpace>", delete_previous_word)
     prefile_date.pack(padx=text_padding, pady=text_padding)
 
     notice_type_label = ttk.Label(middle_frame, text="Notice Type:")
     notice_type_label.pack(padx=text_padding, pady=text_padding)
     notice_type = ttk.Entry(middle_frame)
+    notice_type.bind("<Control-BackSpace>", delete_previous_word)
     notice_type.pack(padx=text_padding, pady=text_padding)
 
     jpn_date_label = ttk.Label(middle_frame, text="USACE JPN Date:")
     jpn_date_label.pack(padx=text_padding, pady=text_padding)
     jpn_date = ttk.Entry(middle_frame)
+    jpn_date.bind("<Control-BackSpace>", delete_previous_word)
     jpn_date.pack(padx=text_padding, pady=text_padding)
 
     pnot_date_label = ttk.Label(middle_frame, text="ADEM PNOT Date:")
     pnot_date_label.pack(padx=text_padding, pady=text_padding)
     pnot_date = ttk.Entry(middle_frame)
+    pnot_date.bind("<Control-BackSpace>", delete_previous_word)
     pnot_date.pack(padx=text_padding, pady=text_padding)
 
     exp_date_label = ttk.Label(middle_frame, text="Expiration Date:")
     exp_date = ttk.Entry(middle_frame)
+    exp_date.bind("<Control-BackSpace>", delete_previous_word)
     exp_date1_label = ttk.Label(middle_frame, text="New Expiration Date:")
     exp_date1 = ttk.Entry(middle_frame)
+    exp_date1.bind("<Control-BackSpace>", delete_previous_word)
     
     if permtype == "Time Extension":
         exp_date_label.pack(padx=text_padding, pady=text_padding)
@@ -451,6 +496,7 @@ def open_perminput_window():
 
     var_code_label = ttk.Label(middle_frame, text="Variance from code:")
     var_code = ttk.Entry(middle_frame)
+    var_code.bind("<Control-BackSpace>", delete_previous_word)
 
     if permtype == "VAR":
         var_code_label.pack(padx=text_padding, pady=text_padding)
@@ -458,10 +504,13 @@ def open_perminput_window():
 
     npdes_num_label = ttk.Label(middle_frame, text="NPDES Permit:")
     npdes_num = ttk.Entry(middle_frame)
+    npdes_num.bind("<Control-BackSpace>", delete_previous_word)
     npdes_date_label = ttk.Label(middle_frame, text="NPDES Permit Date:")
     npdes_date = ttk.Entry(middle_frame)
+    npdes_date.bind("<Control-BackSpace>", delete_previous_word)
     parcel_size_label = ttk.Label(middle_frame,text="Parcel Size (Ac):")
     parcel_size = ttk.Entry(middle_frame)
+    parcel_size.bind("<Control-BackSpace>", delete_previous_word)
     
     if permtype == "NRU":
         npdes_num_label.pack(padx=text_padding, pady=text_padding)
@@ -473,6 +522,7 @@ def open_perminput_window():
 
     prefile_label = ttk.Label(middle_frame, text="Prefile Date:")
     prefile_date = ttk.Entry(middle_frame)
+    prefile_date.bind("<Control-BackSpace>", delete_previous_word)
 
     if permtype == "IP":
         prefile_label.pack(padx=text_padding, pady=text_padding)
@@ -481,11 +531,13 @@ def open_perminput_window():
     fee_amount_label = ttk.Label(right_frame, text="Fee Amount:")
     fee_amount_label.pack(padx=text_padding, pady=text_padding)
     fee_amount = ttk.Entry(right_frame)
+    fee_amount.bind("<Control-BackSpace>", delete_previous_word)
     fee_amount.pack(padx=text_padding, pady=text_padding)
 
     fee_received_label = ttk.Label(right_frame, text="Fee Received:")
     fee_received_label.pack(padx=text_padding, pady=text_padding)
     fee_received = ttk.Entry(right_frame)
+    fee_received.bind("<Control-BackSpace>", delete_previous_word)
     fee_received.pack(padx=text_padding, pady=text_padding)
 
     project_description_label = ttk.Label(right_frame, text="Project Description:")
@@ -523,11 +575,13 @@ def open_perminput_window():
     adem_employee_label = ttk.Label(right_frame, text="ADEM Employee:")
     adem_employee_label.pack(padx=text_padding, pady=text_padding)
     adem_employee = ttk.Entry(right_frame)
+    adem_employee.bind("<Control-BackSpace>", delete_previous_word)
     adem_employee.pack(padx=text_padding, pady=text_padding)
 
     adem_email_label = ttk.Label(right_frame, text="ADEM Email:")
     adem_email_label.pack(padx=text_padding, pady=text_padding)
     adem_email = ttk.Entry(right_frame)
+    adem_email.bind("<Control-BackSpace>", delete_previous_word)
     adem_email.pack(padx=text_padding, pady=text_padding)
 
     submit_button = ttk.Button(right_frame, text="Submit", command=lambda: get_perm_values(acamp.get(), sam.get(), honorific.get(), first_name.get(), last_name.get(), address.get(), title.get(), agent_name.get(), agent_address.get(), city.get(), state.get(), zip_code.get(), project_name.get(), project_city.get(), project_county.get(), parcel_id.get(), prefile_date.get(), notice_type.get(), jpn_date.get(), pnot_date.get(), project_description.get(1.0, ttk.END), fee_amount.get(), fee_received.get(), adem_employee.get(), adem_email.get(),exp_date.get(), exp_date1.get(), npdes_date.get(), npdes_num.get(), parcel_size.get(),var_code.get()))
@@ -588,15 +642,22 @@ def perm_401(acamp, sam, honorific, first_name, last_name, address, title, agent
         'ADEM_Employee': adem_employee,
         'ADEM_Email': adem_email
     }
+    
+    if project_county.lower() == 'mobile':
+        county = ' 097'
+    elif project_county.lower() == 'badlwin':
+        county = ' 002'
+    else:
+        county = ' xxx'
 
     # Render automated report
     template.render(context)
-    template.save('output/' + acamp + ' ' + sam + '_401WQC_Docs.docx')
+    template.save('output/xxx' + acamp + county + ' 401WQ ' + sam + '401WQ.docx')
     template2.render(context)
-    template2.save('output/' + acamp + ' ' + sam + '401Rat_Docs.docx')
+    template2.save('output/xxx' + acamp + county + ' 401WQ ' + sam + 'RATIONALE.docx')
 
-    open_file('output/' + acamp + ' ' + sam +  '_401WQC_Docs.docx')
-    open_file('output/' + acamp + ' ' + sam + '401Rat_Docs.docx')
+    open_file('output/xxx' + acamp + county + ' 401WQ ' + sam + '401WQ.docx')
+    open_file('output/xxx' + acamp + county + ' 401WQ ' + sam + 'RATIONALE.docx')
 
     print("Files successfully generated in /output/ folder.")
 
@@ -639,16 +700,23 @@ def perm_LOP(acamp, sam, honorific, first_name, last_name, address, title, agent
         'ADEM_Email': adem_email
     }
 
+    if project_county.lower() == 'mobile':
+        county = ' 097'
+    elif project_county.lower() == 'badlwin':
+        county = ' 002'
+    else:
+        county = ' xxx'
+
     # Render automated report
     templatePerm1.render(context)
-    templatePerm1.save('output/' + acamp + ' ' + sam + '_CZM_Docs.docx')
+    templatePerm1.save('output/xxx ' + acamp + county + ' CZCERT ' + sam + ' CZM.docx')
     templatePerm2.render(context)
-    templatePerm2.save('output/' + acamp + ' ' + sam + '_401WQ_Docs.docx')
+    templatePerm2.save('output/xxx ' + acamp + county + ' CZCERT ' + sam + ' 401WQ.docx')
     templateRat.render(context)
-    templateRat.save('output/' + acamp + ' ' + sam + '_LOP_Rational.docx')
-    open_file('output/' + acamp + ' ' + sam + '_CZM_Docs.docx')
-    open_file('output/' + acamp + ' ' + sam + '_401WQC_Docs.docx')
-    open_file('output/' + acamp + ' ' + sam + '_LOP_Rational.docx')
+    templateRat.save('output/xxx ' + acamp + county + ' CZCERT ' + sam + ' Rational.docx')
+    open_file('output/xxx ' + acamp + county + ' CZCERT ' + sam + ' CZM.docx')
+    open_file('output/xxx ' + acamp + county + ' CZCERT ' + sam + ' 401WQ.docx')
+    open_file('output/xxx ' + acamp + county + ' CZCERT ' + sam + ' Rational.docx')
     print("Files successfully generated in the 'output' folder.")
 
 def perm_VAR(acamp, sam, honorific, first_name, last_name, address, title, agent_name, agent_address, city, state, zip_code, project_name, project_city, project_county, parcel_id, prefile_date, notice_type, jpn_date, pnot_date, project_description, fee_amount, fee_received, adem_employee, adem_email,var_code):
@@ -657,6 +725,13 @@ def perm_VAR(acamp, sam, honorific, first_name, last_name, address, title, agent
     templatePerm2 = DocxTemplate('templates/VARC_Temp.docx')
     templateRat = DocxTemplate('templates/LOPRat_Temp.docx')
     
+    if project_county.lower() == 'mobile':
+        county = ' 097'
+    elif project_county.lower() == 'badlwin':
+        county = ' 002'
+    else:
+        county = ' xxx'
+
     # Declare template variables
     context = {
         'title': 'Automated Report',
@@ -694,15 +769,16 @@ def perm_VAR(acamp, sam, honorific, first_name, last_name, address, title, agent
 
     # Render automated report
     #Render automated report
+    # Render automated report
     templatePerm1.render(context)
-    templatePerm1.save('output/'+acamp+' ' + sam +'_401WQ_Docs.docx')
+    templatePerm1.save('output/xxx ' + acamp + county + ' VAR ' + sam + ' VAR.docx')
     templatePerm2.render(context)
-    templatePerm2.save('output/' + acamp + ' ' + sam + '_VAR_Docs.docx')
+    templatePerm2.save('output/xxx ' + acamp + county + ' VAR ' + sam + ' 401WQ.docx')
     templateRat.render(context)
-    templateRat.save('output/' + acamp + ' ' + sam + '_LOP_Rational.docx')
-    open_file('output/' + acamp + ' ' + sam + '_VAR_Docs.docx')
-    open_file('output/' + acamp + ' ' + sam + '_401WQC_Docs.docx')
-    open_file('output/' + acamp + ' ' + sam + '_LOP_Rational.docx')
+    templateRat.save('output/xxx ' + acamp + county + ' VAR ' + sam + ' Rational.docx')
+    open_file('output/xxx ' + acamp + county + ' VAR ' + sam + ' VAR.docx')
+    open_file('output/xxx ' + acamp + county + ' VAR ' + sam + ' 401WQ.docx')
+    open_file('output/xxx ' + acamp + county + ' VAR ' + sam + ' Rational.docx')
     print("Files successfully generated in the 'output' folder.")
 
 
@@ -712,6 +788,13 @@ def perm_NRU(acamp, sam, honorific, first_name, last_name, address, title, agent
     templatec = DocxTemplate('templates/LOPC_Temp.docx')
     template2 = DocxTemplate('templates/NRURat_Temp.docx')
     
+    if project_county.lower() == 'mobile':
+        county = ' 097'
+    elif project_county.lower() == 'badlwin':
+        county = ' 002'
+    else:
+        county = ' xxx'
+
     # Declare template variables
     context = {
         'title': 'Automated Report',
@@ -749,15 +832,15 @@ def perm_NRU(acamp, sam, honorific, first_name, last_name, address, title, agent
 
     # Render automated report
     templaten.render(context)
-    templaten.save('output/' + acamp + ' ' + sam + '_NRU_Docs.docx')
+    templaten.save('output/xxx ' + acamp + county + ' NRU ' + sam + ' NRU.docx')
     templatec.render(context)
-    templatec.save('output/' + acamp + ' ' + sam + '_CZM_Docs.docx')
+    templatec.save('output/xxx ' + acamp + county + ' NRU ' + sam + ' 401WQ.docx')
     template2.render(context)
-    template2.save('output/' + acamp + ' ' + sam + '_NRU_Rational.docx')
+    template2.save('output/xxx ' + acamp + county + ' NRU ' + sam + ' Rational.docx')
 
-    open_file('output/' + acamp + ' ' + sam + '_CZM_Docs.docx')
-    open_file('output/' + acamp + ' ' + sam + '_NRU_Docs.docx')
-    open_file('output/' + acamp + ' ' + sam + '_NRU_Rational.docx')
+    open_file('output/xxx ' + acamp + county + ' NRU ' + sam + ' NRU.docx')
+    open_file('output/xxx ' + acamp + county + ' NRU ' + sam + ' 401WQ.docx')
+    open_file('output/xxx ' + acamp + county + ' NRU ' + sam + ' Rational.docx')
     
     print("Files successfully generated in the 'output' folder.")
 
@@ -766,6 +849,13 @@ def perm_TIMEEXT(acamp, sam, honorific, first_name, last_name, address, title, a
     # Import template document
     template = DocxTemplate('templates/401EXT_Temp.docx')
     
+    if project_county.lower() == 'mobile':
+        county = ' 097'
+    elif project_county.lower() == 'badlwin':
+        county = ' 002'
+    else:
+        county = ' xxx'
+
     # Declare template variables
     context = {
         'title': 'Automated Report',
@@ -803,9 +893,9 @@ def perm_TIMEEXT(acamp, sam, honorific, first_name, last_name, address, title, a
 
     # Render automated report
     template.render(context)
-    template.save('output/' + acamp + ' ' + sam + '_TimeExt_Docs.docx')
+    template.save('output/xxx ' + acamp + county + ' CZCERT ' + sam +' TimeExt.docx')
     
-    open_file('output/' + acamp + ' ' + sam + '_TimeExt_Docs.docx')
+    open_file('output/xxx ' + acamp + county + ' CZCERT ' + sam +' TimeExt.docx')
     
     print("Files successfully generated in the 'output' folder.")
 
@@ -838,13 +928,13 @@ def open_perm_window():
     
     #END  perm WINDOW
 
+
 # BEGIN INSPECTION REPORT
 def get_inspr_values():
     # Import template document
     template = DocxTemplate('templates/Insp_Temp.docx')
 
-    # Declare template variables
-    
+
     context = {
         'title': 'Automated Report',
         'day': datetime.datetime.now().strftime('%d'),
@@ -872,9 +962,13 @@ def get_inspr_values():
 
     # Render automated report
     template.render(context)
+        
     template.save('output/xxx ' + " " + context.get('ACAMP_Number') + " " + context.get('SAM_Number') + ' _INSP.docx')
     inspr.destroy()
     print("Files successfully generated in /output/ folder.")
+
+
+    
 
 # Inspection Report Window
 def open_inspr_window():
@@ -907,31 +1001,37 @@ def open_inspr_window():
     acamp_label = ttk.Label(left_frame, text="ACAMP Number:")
     acamp_label.pack(padx=text_padding, pady=text_padding)
     acamp = ttk.Entry(left_frame)
+    acamp.bind("<Control-BackSpace>", delete_previous_word)
     acamp.pack(padx=text_padding, pady=text_padding)
 
     sam_label = ttk.Label(left_frame, text="SAM Number:")
     sam_label.pack(padx=text_padding, pady=text_padding)
     sam = ttk.Entry(left_frame)
+    sam.bind("<Control-BackSpace>", delete_previous_word)
     sam.pack(padx=text_padding, pady=text_padding)
 
     timein_label = ttk.Label(left_frame, text="Inspection Time Start:")
     timein_label.pack(padx=text_padding, pady=text_padding)
     timein = ttk.Entry(left_frame)
+    timein.bind("<Control-BackSpace>", delete_previous_word)
     timein.pack(padx=text_padding, pady=text_padding)
 
     timeout_label = ttk.Label(left_frame, text="Inspection Time End:")
     timeout_label.pack(padx=text_padding, pady=text_padding)
     timeout = ttk.Entry(left_frame)
+    timeout.bind("<Control-BackSpace>", delete_previous_word)
     timeout.pack(padx=text_padding, pady=text_padding)
 
     firstname_label = ttk.Label(left_frame, text="Applicant First Name:")
     firstname_label.pack(padx=text_padding, pady=text_padding)
     firstname = ttk.Entry(left_frame)
+    firstname.bind("<Control-BackSpace>", delete_previous_word)
     firstname.pack(padx=text_padding, pady=text_padding)
 
     lastname_label = ttk.Label(left_frame, text="Applicant Last Name:")
     lastname_label.pack(padx=text_padding, pady=text_padding)
     lastname = ttk.Entry(left_frame)
+    lastname.bind("<Control-BackSpace>", delete_previous_word)
     lastname.pack(padx=text_padding, pady=text_padding)
 
     complaint_label = ttk.Label(left_frame, text="Complaint #:")
@@ -943,41 +1043,49 @@ def open_inspr_window():
     phone_label = ttk.Label(left_frame, text="Applicant Phone Number:")
     phone_label.pack(padx=text_padding, pady=text_padding)
     phone = ttk.Entry(left_frame)
+    phone.bind("<Control-BackSpace>", delete_previous_word)
     phone.pack(padx=text_padding, pady=text_padding)
 
     address_label = ttk.Label(left_frame, text="Applicant Address:")
     address_label.pack(padx=text_padding, pady=text_padding)
     address = ttk.Entry(left_frame)
+    address.bind("<Control-BackSpace>", delete_previous_word)
     address.pack(padx=text_padding, pady=text_padding)
 
     projcoords_label = ttk.Label(right_frame, text="Project Coordinates:")
     projcoords_label.pack(padx=text_padding, pady=text_padding)
     projcoords = ttk.Entry(right_frame)
+    projcoords.bind("<Control-BackSpace>", delete_previous_word)
     projcoords.pack(padx=text_padding, pady=text_padding)
 
     projectname_label = ttk.Label(right_frame, text="Project Name:")
     projectname_label.pack(padx=text_padding, pady=text_padding)
     projectname = ttk.Entry(right_frame)
+    projectname.bind("<Control-BackSpace>", delete_previous_word)
     projectname.pack(padx=text_padding, pady=text_padding)
 
     projectcity_label = ttk.Label(right_frame, text="Project City:")
     projectcity_label.pack(padx=text_padding, pady=text_padding)
     projectcity = ttk.Entry(right_frame)
+    projectcity.bind("<Control-BackSpace>", delete_previous_word)
     projectcity.pack(padx=text_padding, pady=text_padding)
 
     projectcounty_label = ttk.Label(right_frame, text="Project County:")
     projectcounty_label.pack(padx=text_padding, pady=text_padding)
     projectcounty = ttk.Entry(right_frame)
+    projectcounty.bind("<Control-BackSpace>", delete_previous_word)
     projectcounty.pack(padx=text_padding, pady=text_padding)
 
     photos_label = ttk.Label(right_frame, text="Photos Taken? (Yes/No):")
     photos_label.pack(padx=text_padding, pady=text_padding)
     photos = ttk.Entry(right_frame)
+    photos.bind("<Control-BackSpace>", delete_previous_word)
     photos.pack(padx=text_padding, pady=text_padding)
 
     participants_label = ttk.Label(right_frame, text="Other Participants (Name, Org):")
     participants_label.pack(padx=text_padding, pady=text_padding)
     participants = ttk.Entry(right_frame)
+    participants.bind("<Control-BackSpace>", delete_previous_word)
     participants.pack(padx=text_padding, pady=text_padding)
 
     permitter_list = []
@@ -1010,11 +1118,13 @@ def open_inspr_window():
     yourname_label = ttk.Label(right_frame, text="Your Name:")
     yourname_label.pack(padx=text_padding, pady=text_padding)
     yourname = ttk.Entry(right_frame)
+    yourname.bind("<Control-BackSpace>", delete_previous_word)
     yourname.pack(padx=text_padding, pady=text_padding)
 
     youremail_label = ttk.Label(right_frame, text="Your Email:")
     youremail_label.pack(padx=text_padding, pady=text_padding)
     youremail = ttk.Entry(right_frame)
+    youremail.bind("<Control-BackSpace>", delete_previous_word)
     youremail.pack(padx=text_padding, pady=text_padding)
 
 
@@ -1098,81 +1208,97 @@ def open_feel_window():
     sam_label = ttk.Label(right_frame, text="SAM Number:")
     sam_label.pack(pady=text_padding)
     sam = ttk.Entry(right_frame)
+    sam.bind("<Control-BackSpace>", delete_previous_word)
     sam.pack(padx=text_padding, pady=text_padding)
 
     acamp_label = ttk.Label(right_frame, text="ACAMP Number):")
     acamp_label.pack(pady=text_padding)
     acamp = ttk.Entry(right_frame)
+    acamp.bind("<Control-BackSpace>", delete_previous_word)
     acamp.pack(padx=text_padding, pady=text_padding)
 
     honorific_label = ttk.Label(left_frame, text="Applicant Honorific (Mr./Ms./Dr./etc):")
     honorific_label.pack(pady=text_padding)
     honorific = ttk.Entry(left_frame)
+    honorific.bind("<Control-BackSpace>", delete_previous_word)
     honorific.pack(padx=text_padding, pady=text_padding)
 
     firstname_label = ttk.Label(left_frame, text="Applicant First Name:")
     firstname_label.pack(pady=text_padding)
     firstname = ttk.Entry(left_frame)
+    firstname.bind("<Control-BackSpace>", delete_previous_word)
     firstname.pack(padx=text_padding, pady=text_padding)
 
     lastname_label = ttk.Label(left_frame, text="Applicant Last Name:")
     lastname_label.pack(pady=text_padding)
     lastname = ttk.Entry(left_frame)
+    lastname.bind("<Control-BackSpace>", delete_previous_word)
     lastname.pack(padx=text_padding, pady=text_padding)
 
     address_label = ttk.Label(left_frame, text="Applicant Address:")
     address_label.pack(pady=text_padding)
     address = ttk.Entry(left_frame)
+    address.bind("<Control-BackSpace>", delete_previous_word)
     address.pack(padx=text_padding, pady=text_padding)
 
     title_label = ttk.Label(left_frame, text="Applicant Title or Company:")
     title_label.pack(pady=text_padding)
     title = ttk.Entry(left_frame)
+    title.bind("<Control-BackSpace>", delete_previous_word)
     title.pack(padx=text_padding, pady=text_padding)
 
     agentname_label = ttk.Label(left_frame, text="Agent Full Name:")
     agentname_label.pack(pady=text_padding)
     agentname = ttk.Entry(left_frame)
+    agentname.bind("<Control-BackSpace>", delete_previous_word)
     agentname.pack(padx=text_padding, pady=text_padding)
 
     agentaddress_label = ttk.Label(left_frame, text="Agent Address:")
     agentaddress_label.pack(pady=text_padding)
     agentaddress = ttk.Entry(left_frame)
+    agentaddress.bind("<Control-BackSpace>", delete_previous_word)
     agentaddress.pack(padx=text_padding, pady=text_padding)
 
     city_label = ttk.Label(left_frame, text="City:")
     city_label.pack(pady=text_padding)
     city = ttk.Entry(left_frame)
+    city.bind("<Control-BackSpace>", delete_previous_word)
     city.pack(padx=text_padding, pady=text_padding)
 
     state_label = ttk.Label(left_frame, text="State:")
     state_label.pack(pady=text_padding)
     state = ttk.Entry(left_frame)
+    state.bind("<Control-BackSpace>", delete_previous_word)
     state.pack(padx=text_padding, pady=text_padding)
 
     zip_label = ttk.Label(left_frame, text="Zip:")
     zip_label.pack(pady=text_padding)
     zip = ttk.Entry(left_frame)
+    zip.bind("<Control-BackSpace>", delete_previous_word)
     zip.pack(padx=text_padding, pady=text_padding)
 
     projectname_label = ttk.Label(right_frame, text="Project Name:")
     projectname_label.pack(pady=text_padding)
     projectname = ttk.Entry(right_frame)
+    projectname.bind("<Control-BackSpace>", delete_previous_word)
     projectname.pack(padx=text_padding, pady=text_padding)
 
     projectcity_label = ttk.Label(right_frame, text="Project City:")
     projectcity_label.pack(pady=text_padding)
     projectcity = ttk.Entry(right_frame)
+    projectcity.bind("<Control-BackSpace>", delete_previous_word)
     projectcity.pack(padx=text_padding, pady=text_padding)
 
     projectcounty_label = ttk.Label(right_frame, text="Project County:")
     projectcounty_label.pack(pady=text_padding)
     projectcounty = ttk.Entry(right_frame)
+    projectcounty.bind("<Control-BackSpace>", delete_previous_word)
     projectcounty.pack(padx=text_padding, pady=text_padding)
 
     feeamount_label = ttk.Label(right_frame, text="Fee Amount Due:")
     feeamount_label.pack(pady=text_padding)
     feeamount = ttk.Entry(right_frame)
+    feeamount.bind("<Control-BackSpace>", delete_previous_word)
     feeamount.pack(padx=text_padding, pady=text_padding)
 
     # Button to retrieve input values
@@ -1211,11 +1337,13 @@ def open_feel_window():
     yourname_label = ttk.Label(right_frame, text="Your Name:")
     yourname_label.pack(pady=text_padding)
     yourname = ttk.Entry(right_frame)
+    yourname.bind("<Control-BackSpace>", delete_previous_word)
     yourname.pack(padx=text_padding, pady=text_padding)
 
     youremail_label = ttk.Label(right_frame, text="Your Email:")
     youremail_label.pack(pady=text_padding)    
     youremail = ttk.Entry(right_frame)
+    youremail.bind("<Control-BackSpace>", delete_previous_word)
     youremail.pack(padx=text_padding, pady=text_padding)
     
     # Button to retrieve input values
