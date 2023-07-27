@@ -3,6 +3,8 @@ from tkinter import filedialog
 import ttkbootstrap as ttk
 import datetime
 import subprocess
+import sqlite3
+import os
 from docx.shared import Cm
 from docx.shared import Inches
 from docxtpl import DocxTemplate, InlineImage
@@ -44,6 +46,7 @@ permitters = {
 
 # Main Configuration
 
+
 text_padding = 5
 main = ttk.Window(themename='yeti')
 main.title("ADEM Coastal Document Genie")
@@ -52,10 +55,20 @@ windowcolor.set('yeti')
 main.iconbitmap("free.ico")
 
 def toggle_dark_mode():
-    if windowcolor.get() == 'darkly':
+    conn = sqlite3.connect('database.db')
+    c = conn.cursor()
+    c.execute("SELECT Dark FROM settings")
+    data = c.fetchall()  
+    if data[0][0] == 0:
         style.theme_use('darkly')
-    else:
+        sql = f"UPDATE settings SET Dark = 1"
+        c.execute(sql)
+    if data[0][0] == 1:
         style.theme_use('yeti')
+        sql = f"UPDATE settings SET Dark = 0"
+        c.execute(sql)
+    conn.commit()
+    conn.close()
 
 def open_file(filename):
     subprocess.Popen(["start",'', filename], shell=True)
@@ -108,11 +121,19 @@ def delete_previous_word(event):
 #BEGIN PNOT WINDOW
 def open_pnotinput_window():
     global pnot1
+    global honorific, first_name, last_name, title, project_address
+    global agent_name, agent_address
+    global city, state
+    global project_name, project_city, project_county
+    global fee_amount, projcoords
+    global adem_employee, adem_email, sam, acamp
+    global timein, timeout, complaint, parcel_id
+    global phone, comments, photos, participants
     pnot1 = ttk.Toplevel()
     pnot1.title("ADEM Coastal Document Genie")
     pnot1.iconbitmap("free.ico")
 
-    pnot1.bind('<Return>', lambda event: get_pnot_values(acamp.get(), sam.get(), project_name.get(), project_location.get(), project_city.get(), project_county.get(), project_desc.get(1.0, ttk.END), var_code.get(), parcel_id.get(), federal_agency.get()))
+    pnot1.bind('<Return>', lambda event: get_pnot_values(acamp.get(), sam.get(), project_name.get(), project_address.get(), project_city.get(), project_county.get(), project_description.get(1.0, ttk.END), var_code.get(), parcel_id.get(), federal_agency.get()))
 
     left_frame = ttk.Frame(pnot1, )
     left_frame.pack(side=ttk.LEFT, padx=10)
@@ -123,7 +144,11 @@ def open_pnotinput_window():
     greeting = ttk.Label(left_frame, text="Please provide the following information:", )
 
     greeting.pack(padx=text_padding, pady=text_padding)
+
+    database_button = ttk.Button(left_frame, text = 'Load from Database', command = show_data)
+    database_button.pack()
     
+    honorific = ttk.Entry(left_frame)
     acamp_label = ttk.Label(left_frame, text="ACAMP Number:")
     acamp_label.pack(padx=text_padding, pady=text_padding)
     acamp = ttk.Entry(left_frame)
@@ -147,18 +172,18 @@ def open_pnotinput_window():
 
     address_label = ttk.Label(left_frame, text="Project Address/Location:")
     address_label.pack(padx=text_padding, pady=text_padding)
-    project_location = ttk.Entry(left_frame)
-    project_location.pack(padx=text_padding, pady=text_padding)
-    project_location.bind("<Control-BackSpace>", delete_previous_word)
+    project_address = ttk.Entry(left_frame)
+    project_address.pack(padx=text_padding, pady=text_padding)
+    project_address.bind("<Control-BackSpace>", delete_previous_word)
 
-    projectcity_label = ttk.Label(left_frame, text="Project City:")
-    projectcity_label.pack(padx=text_padding, pady=text_padding)
+    project_city_label = ttk.Label(left_frame, text="Project City:")
+    project_city_label.pack(padx=text_padding, pady=text_padding)
     project_city = ttk.Entry(left_frame)
     project_city.pack(padx=text_padding, pady=text_padding)
     project_city.bind("<Control-BackSpace>", delete_previous_word)
 
-    projectcounty_label = ttk.Label(left_frame, text="Project County:")
-    projectcounty_label.pack(padx=text_padding, pady=text_padding)
+    project_county_label = ttk.Label(left_frame, text="Project County:")
+    project_county_label.pack(padx=text_padding, pady=text_padding)
     project_county = ttk.Entry(left_frame)
     project_county.pack(padx=text_padding, pady=text_padding)
     project_county.bind("<Control-BackSpace>", delete_previous_word)
@@ -188,124 +213,138 @@ def open_pnotinput_window():
     
     project_desc_label = ttk.Label(right_frame, text="Project Description:")
     project_desc_label.pack(padx=text_padding, pady=text_padding)
-    project_desc = ttk.Text(right_frame)
-    project_desc.pack(padx=text_padding, pady=text_padding)
+    project_description = ttk.Text(right_frame)
+    project_description.pack(padx=text_padding, pady=text_padding)
 
-    submit_button = ttk.Button(right_frame, text="Submit", command=lambda: get_pnot_values(acamp.get(), sam.get(), project_name.get(), project_location.get(), project_city.get(), project_county.get(), project_desc.get(1.0, ttk.END), var_code.get(), parcel_id.get(), federal_agency.get()))
+    submit_button = ttk.Button(right_frame, text="Submit", command=lambda: get_pnot_values(acamp.get(), sam.get(), project_name.get(), project_address.get(), project_city.get(), project_county.get(), project_description.get(1.0, ttk.END), var_code.get(), parcel_id.get(), federal_agency.get()))
     submit_button.pack(padx=text_padding, pady=text_padding)
 
-def get_pnot_values(acamp, sam="", project_name="", project_location="", project_city="", project_county="", project_desc="", var_code="", parcel_id="", federal_agency=""):
+def get_pnot_values(acamp, sam="", project_name="", project_address="", project_city="", project_county="", project_description="", var_code="", parcel_id="", federal_agency=""):
     if pnottype == "IP":
-        pnot_LOP(acamp, sam, project_name, project_location, project_city, project_county, project_desc)
+        pnot_LOP(acamp, sam, project_name, project_address, project_city, project_county, project_description)
     elif pnottype == "LOP":
-        pnot_LOP(acamp, sam, project_name, project_location, project_city, project_county, project_desc)
+        pnot_LOP(acamp, sam, project_name, project_address, project_city, project_county, project_description)
     elif pnottype == "VAR":
-        pnot_VAR(acamp, sam, project_name, project_location, project_city, project_county, project_desc, var_code, parcel_id)
+        pnot_VAR(acamp, sam, project_name, project_address, project_city, project_county, project_description, var_code, parcel_id)
     elif pnottype == "NRU":
-        pnot_NRU(acamp, sam, project_name, project_location, project_city, project_county, project_desc)
+        pnot_NRU(acamp, sam, project_name, project_address, project_city, project_county, project_description)
     elif pnottype == "BSSE":
-        pnot_BSSE(acamp, project_name, project_location, project_city, project_county, project_desc)
+        pnot_BSSE(acamp, project_name, project_address, project_city, project_county, project_description)
     elif pnottype == "FAA":
-        pnot_FAA(acamp, project_location, project_city, project_county, federal_agency, project_desc)
+        pnot_FAA(acamp, project_address, project_city, project_county, federal_agency, project_description)
     elif pnottype == "OCS":
-        pnot_OCS(acamp, project_name, project_location, project_desc)
+        pnot_OCS(acamp, project_name, project_address, project_description)
     
     pnot.destroy()
     pnot1.destroy()
 
-def pnot_BSSE(acamp, project_name, project_location, project_city, project_county, project_desc):
+def pnot_BSSE(acamp, project_name, project_address, project_city, project_county, project_description):
     template = DocxTemplate('templates/BSEEPNOT_Temp.docx')
     context = {
         'ACAMP_Number': acamp,
         'Project_Name': project_name,
-        'Project_Location': project_location,
-        'Project_Description': project_desc,
+        'Project_Location': project_address,
+        'Project_Description': project_description,
         'Project_City': project_city,
         'Project_County': project_county
     }
+
+    insert_data(acamp, context)
+
+
     template.render(context)
     filename ='output/' + acamp+' BSSE_PNOT.docx'
     template.save(filename.format(acamp))
     open_file(filename)
     print("Files successfully generated in /output/ folder.")
 
-def pnot_VAR(acamp, sam, project_name, project_location, project_city, project_county,project_desc,var_code,parcel_id):
+def pnot_VAR(acamp, sam, project_name, project_address, project_city, project_county,project_description,var_code,parcel_id):
     template = DocxTemplate('templates/VARPNOT_Temp.docx')
     context = {
         'ACAMP_Number': acamp,
         'SAM_Number': sam,
         'Project_Name': project_name,
-        'Project_Location': project_location,
+        'Project_Location': project_address,
         'Project_City': project_city,
         'Project_County': project_county,
         'Parcel_ID': parcel_id,
-        'Project_Description': project_desc,
+        'Project_Description': project_description,
         'var_code': var_code,
     }
+
+    insert_data(acamp, context)
+
     template.render(context)
     filename ='output/' + acamp+' ' + sam +' VAR_PNOT.docx'
     template.save(filename.format(acamp, sam))
     open_file(filename)
     print("Files successfully generated in /output/ folder.")
 
-def pnot_NRU(acamp, sam, project_name, project_location, project_city, project_county,project_desc):
+def pnot_NRU(acamp, sam, project_name, project_address, project_city, project_county,project_description):
     template = DocxTemplate('templates/NRUPNOT_Temp.docx')
     context = {
         'ACAMP_Number': acamp,
         'SAM_Number': sam,
         'Project_Name': project_name,
-        'Project_Location': project_location,
+        'Project_Location': project_address,
         'Project_City': project_city,
         'Project_County': project_county,
-        'Project_Description': project_desc,
+        'Project_Description': project_description,
     }
+
+
+    insert_data(acamp, context)
+
     template.render(context)
     filename ='output/' + acamp+' ' + sam +' NRU_PNOT.docx'
     template.save(filename.format(acamp, sam))
     open_file(filename)
     print("Files successfully generated in /output/ folder.")
 
-def pnot_FAA(acamp, project_location, project_city, project_county, federal_agency, project_desc):
+def pnot_FAA(acamp, project_address, project_city, project_county, federal_agency, project_description):
     template = DocxTemplate('templates/FAAPNOT_Temp.docx')
     context = {
         'ACAMP_Number': acamp,
         'Federal_Agency': federal_agency,
-        'Project_Location': project_location,
+        'Project_Location': project_address,
         'Project_City': project_city,
         'Project_County': project_county,
-        'Project_Description': project_desc,
+        'Project_Description': project_description,
     }
+    insert_data(acamp, context)
     template.render(context)
     filename = 'output/' + acamp+' ' + sam +' FAA_PNOT.docx'
     template.save(filename.format(acamp, sam))
     open_file(filename)
     print("Files successfully generated in /output/ folder.")
 
-def pnot_LOP(acamp, sam, project_name, project_location, project_city, project_county,project_desc):
+def pnot_LOP(acamp, sam, project_name, project_address, project_city, project_county,project_description):
     template = DocxTemplate('templates/LOPPNOT_Temp.docx')
     context = {
         'ACAMP_Number': acamp,
         'SAM_Number': sam,
         'Project_Name': project_name,
-        'Project_Location': project_location,
+        'Project_Location': project_address,
         'Project_City': project_city,
         'Project_County': project_county,
-        'Project_Description': project_desc,
+        'Project_Description': project_description,
     }
+    insert_data(acamp, context)
     template.render(context)
     filename ='output/' + acamp+' ' + sam +' LOP_PNOT.docx'
     template.save(filename.format(acamp, sam))
     open_file(filename)
     print("Files successfully generated in /output/ folder.")
 
-def pnot_OCS(acamp, project_name, project_location, project_desc):
+def pnot_OCS(acamp, project_name, project_address, project_description):
     template = DocxTemplate('templates/OCSPNOT_Temp.docx')
     context = {
         'ACAMP_Number': acamp,
         'Project_Name': project_name,
-        'Project_Location': project_location,
-        'Project_Description': project_desc,
+        'Project_Location': project_address,
+        'Project_Description': project_description,
     }
+    insert_data(acamp, context)
     template.render(context)
     filename ='output/' + acamp+' ' +' OCS_PNOT.docx'
     template.save(filename.format(acamp))
@@ -322,7 +361,6 @@ def open_pnot_window():
     global pnot
     
     global pnottype
-    
 
     # PNOT Choice Window
     pnot = ttk.Toplevel()
@@ -344,10 +382,18 @@ def open_pnot_window():
 #BEGIN perm WINDOW
 def open_perminput_window():
     global perm1
+    global honorific, first_name, last_name, title, project_address
+    global agent_name, agent_address
+    global city, state, zip, project_description
+    global project_name, project_city, project_county
+    global fee_amount, projcoords
+    global adem_employee, adem_email, sam, acamp
+    global timein, timeout, complaint
+    global phone, comments, photos, participants
     perm1 = ttk.Toplevel()
     perm1.title("ADEM Coastal Document Genie")
     perm.iconbitmap("free.ico")
-    perm1.bind('<Return>', lambda event: get_perm_values(acamp.get(), sam.get(), honorific.get(), first_name.get(), last_name.get(), address.get(), title.get(), agent_name.get(), agent_address.get(), city.get(), state.get(), zip_code.get(), project_name.get(), project_city.get(), project_county.get(), parcel_id.get(), prefile_date.get(), notice_type.get(), jpn_date.get(), pnot_date.get(), project_description.get(1.0, ttk.END), fee_amount.get(), fee_received.get(), adem_employee.get(), adem_email.get(),exp_date.get(), exp_date1.get(), npdes_date.get(), npdes_num.get(), parcel_size.get(), var_code.get()))
+    perm1.bind('<Return>', lambda event: get_perm_values(acamp.get(), sam.get(), honorific.get(), first_name.get(), last_name.get(), project_address.get(), title.get(), agent_name.get(), agent_address.get(), city.get(), state.get(), zip.get(), project_name.get(), project_city.get(), project_county.get(), parcel_id.get(), prefile_date.get(), notice_type.get(), jpn_date.get(), pnot_date.get(), project_description.get(1.0, ttk.END), fee_amount.get(), fee_received.get(), adem_employee.get(), adem_email.get(),exp_date.get(), exp_date1.get(), npdes_date.get(), npdes_num.get(), parcel_size.get(), var_code.get()))
 
     left_frame = ttk.Frame(perm1, )
     left_frame.pack(side=ttk.LEFT)
@@ -360,6 +406,9 @@ def open_perminput_window():
 
     greeting = ttk.Label(left_frame, text="Please provide the following information:")
     greeting.pack(padx=text_padding, pady=text_padding)
+
+    database_button = ttk.Button(left_frame, text = 'Load from Database', command = show_data)
+    database_button.pack()
 
     acamp_label = ttk.Label(middle_frame, text="ACAMP Number:")
     acamp_label.pack(padx=text_padding, pady=text_padding)
@@ -399,9 +448,9 @@ def open_perminput_window():
 
     address_label = ttk.Label(left_frame, text="Applicant Address:")
     address_label.pack(padx=text_padding, pady=text_padding)
-    address = ttk.Entry(left_frame)
-    address.bind("<Control-BackSpace>", delete_previous_word)
-    address.pack(padx=text_padding, pady=text_padding)
+    project_address = ttk.Entry(left_frame)
+    project_address.bind("<Control-BackSpace>", delete_previous_word)
+    project_address.pack(padx=text_padding, pady=text_padding)
 
     agent_name_label = ttk.Label(left_frame, text="Agent Full Name:")
     agent_name_label.pack(padx=text_padding, pady=text_padding)
@@ -429,9 +478,9 @@ def open_perminput_window():
 
     zip_code_label = ttk.Label(left_frame, text="Zip Code:")
     zip_code_label.pack(padx=text_padding, pady=text_padding)
-    zip_code = ttk.Entry(left_frame)
-    zip_code.bind("<Control-BackSpace>", delete_previous_word)
-    zip_code.pack(padx=text_padding, pady=text_padding)
+    zip = ttk.Entry(left_frame)
+    zip.bind("<Control-BackSpace>", delete_previous_word)
+    zip.pack(padx=text_padding, pady=text_padding)
 
     project_name_label = ttk.Label(middle_frame, text="Project Name:")
     project_name_label.pack(padx=text_padding, pady=text_padding)
@@ -563,7 +612,6 @@ def open_perminput_window():
     def callback(*args):
         for i in permitters:
             if clicked.get() == permitters.get(i)[0]:
-                print(permitters[i])
                 adem_email.delete(0,ttk.END)
                 adem_employee.delete(0,ttk.END)
                 adem_employee.insert(0, permitters[i][0])
@@ -584,48 +632,45 @@ def open_perminput_window():
     adem_email.bind("<Control-BackSpace>", delete_previous_word)
     adem_email.pack(padx=text_padding, pady=text_padding)
 
-    submit_button = ttk.Button(right_frame, text="Submit", command=lambda: get_perm_values(acamp.get(), sam.get(), honorific.get(), first_name.get(), last_name.get(), address.get(), title.get(), agent_name.get(), agent_address.get(), city.get(), state.get(), zip_code.get(), project_name.get(), project_city.get(), project_county.get(), parcel_id.get(), prefile_date.get(), notice_type.get(), jpn_date.get(), pnot_date.get(), project_description.get(1.0, ttk.END), fee_amount.get(), fee_received.get(), adem_employee.get(), adem_email.get(),exp_date.get(), exp_date1.get(), npdes_date.get(), npdes_num.get(), parcel_size.get(),var_code.get()))
+    submit_button = ttk.Button(right_frame, text="Submit", command=lambda: get_perm_values(acamp.get(), sam.get(), honorific.get(), first_name.get(), last_name.get(), project_address.get(), title.get(), agent_name.get(), agent_address.get(), city.get(), state.get(), zip.get(), project_name.get(), project_city.get(), project_county.get(), parcel_id.get(), prefile_date.get(), notice_type.get(), jpn_date.get(), pnot_date.get(), project_description.get(1.0, ttk.END), fee_amount.get(), fee_received.get(), adem_employee.get(), adem_email.get(),exp_date.get(), exp_date1.get(), npdes_date.get(), npdes_num.get(), parcel_size.get(),var_code.get()))
     submit_button.pack(padx=text_padding, pady=text_padding)
 
 
-def get_perm_values(acamp, sam, honorific, first_name, last_name, address, title, agent_name, agent_address, city, state, zip_code, project_name, project_city, project_county, parcel_id, prefile_date, notice_type, jpn_date, pnot_date, project_description, fee_amount, fee_received, adem_employee, adem_email, exp_date, exp_date1, npdes_date, npdes_num, parcel_size, var_code):
+def get_perm_values(acamp, sam, honorific, first_name, last_name, project_address, title, agent_name, agent_address, city, state, zip, project_name, project_city, project_county, parcel_id, prefile_date, notice_type, jpn_date, pnot_date, project_description, fee_amount, fee_received, adem_employee, adem_email, exp_date, exp_date1, npdes_date, npdes_num, parcel_size, var_code):
     if permtype == "IP":
-        perm_LOP(acamp, sam, honorific, first_name, last_name, address, title, agent_name, agent_address, city, state, zip_code, project_name, project_city, project_county, parcel_id, prefile_date, notice_type, jpn_date, pnot_date, project_description, fee_amount, fee_received, adem_employee, adem_email)
+        perm_LOP(acamp, sam, honorific, first_name, last_name, project_address, title, agent_name, agent_address, city, state, zip, project_name, project_city, project_county, parcel_id, prefile_date, notice_type, jpn_date, pnot_date, project_description, fee_amount, fee_received, adem_employee, adem_email)
     elif permtype == "LOP":
-        perm_LOP(acamp, sam, honorific, first_name, last_name, address, title, agent_name, agent_address, city, state, zip_code, project_name, project_city, project_county, parcel_id, prefile_date, notice_type, jpn_date, pnot_date, project_description, fee_amount, fee_received, adem_employee, adem_email)
+        perm_LOP(acamp, sam, honorific, first_name, last_name, project_address, title, agent_name, agent_address, city, state, zip, project_name, project_city, project_county, parcel_id, prefile_date, notice_type, jpn_date, pnot_date, project_description, fee_amount, fee_received, adem_employee, adem_email)
     elif permtype == "VAR":
-        perm_VAR(acamp, sam, honorific, first_name, last_name, address, title, agent_name, agent_address, city, state, zip_code, project_name, project_city, project_county, parcel_id, prefile_date, notice_type, jpn_date, pnot_date, project_description, fee_amount, fee_received, adem_employee, adem_email,var_code)
+        perm_VAR(acamp, sam, honorific, first_name, last_name, project_address, title, agent_name, agent_address, city, state, zip, project_name, project_city, project_county, parcel_id, prefile_date, notice_type, jpn_date, pnot_date, project_description, fee_amount, fee_received, adem_employee, adem_email,var_code)
     elif permtype == "NRU":
-        perm_NRU(acamp, sam, honorific, first_name, last_name, address, title, agent_name, agent_address, city, state, zip_code, project_name, project_city, project_county, parcel_id, prefile_date, notice_type, jpn_date, pnot_date, project_description, fee_amount, fee_received, adem_employee, adem_email, npdes_date,npdes_num)
+        perm_NRU(acamp, sam, honorific, first_name, last_name, project_address, title, agent_name, agent_address, city, state, zip, project_name, project_city, project_county, parcel_id, prefile_date, notice_type, jpn_date, pnot_date, project_description, fee_amount, fee_received, adem_employee, adem_email, npdes_date,npdes_num)
     elif permtype == "401":
-        perm_401(acamp, sam, honorific, first_name, last_name, address, title, agent_name, agent_address, city, state, zip_code, project_name, project_city, project_county, parcel_id, prefile_date, notice_type, jpn_date, pnot_date, project_description, fee_amount, fee_received, adem_employee, adem_email)
+        perm_401(acamp, sam, honorific, first_name, last_name, project_address, title, agent_name, agent_address, city, state, zip, project_name, project_city, project_county, parcel_id, prefile_date, notice_type, jpn_date, pnot_date, project_description, fee_amount, fee_received, adem_employee, adem_email)
     elif permtype == "TIMEEXT":
-        perm_TIMEEXT(acamp, sam, honorific, first_name, last_name, address, title, agent_name, agent_address, city, state, zip_code, project_name, project_city, project_county, parcel_id, prefile_date, notice_type, jpn_date, pnot_date, project_description, fee_amount, fee_received, adem_employee, adem_email, exp_date, exp_date1)    
+        perm_TIMEEXT(acamp, sam, honorific, first_name, last_name, project_address, title, agent_name, agent_address, city, state, zip, project_name, project_city, project_county, parcel_id, prefile_date, notice_type, jpn_date, pnot_date, project_description, fee_amount, fee_received, adem_employee, adem_email, exp_date, exp_date1)    
     
     perm.destroy()
     perm1.destroy()
 
-def perm_401(acamp, sam, honorific, first_name, last_name, address, title, agent_name, agent_address, city, state, zip_code, project_name, project_city, project_county, parcel_id, prefile_date, notice_type, jpn_date, pnot_date, project_description, fee_amount, fee_received, adem_employee, adem_email):
+def perm_401(acamp, sam, honorific, first_name, last_name, project_address, title, agent_name, agent_address, city, state, zip, project_name, project_city, project_county, parcel_id, prefile_date, notice_type, jpn_date, pnot_date, project_description, fee_amount, fee_received, adem_employee, adem_email):
 # Import template document
     template = DocxTemplate('templates/401WQC_Temp.docx')
     template2 = DocxTemplate('templates/401Rat_Temp.docx')
 
     # Declare template variables
     context = {
-        'title': 'Automated Report',
-        'day': datetime.datetime.now().strftime('%d'),
-        'month': datetime.datetime.now().strftime('%b'),
-        'year': datetime.datetime.now().strftime('%Y'),
+        
         'Applicant_Honorific': honorific,
         'Applicant_FirstName': first_name,
         'Applicant_LastName': last_name,
-        'Applicant_Address': address,
+        'Applicant_Address': project_address,
         'Applicant_Title': title,
         'Agent_Name': agent_name,
         'Agent_Address': agent_address,
         'ACity': city,
         'AState': state,
-        'AZip': zip_code,
+        'AZip': zip,
         'Project_Name': project_name,
         'Project_City': project_city,
         'Project_County': project_county,
@@ -645,10 +690,12 @@ def perm_401(acamp, sam, honorific, first_name, last_name, address, title, agent
     
     if project_county.lower() == 'mobile':
         county = ' 097'
-    elif project_county.lower() == 'badlwin':
+    elif project_county.lower() == 'baldwin':
         county = ' 002'
     else:
         county = ' xxx'
+
+    insert_data(acamp, context)
 
     # Render automated report
     template.render(context)
@@ -661,7 +708,7 @@ def perm_401(acamp, sam, honorific, first_name, last_name, address, title, agent
 
     print("Files successfully generated in /output/ folder.")
 
-def perm_LOP(acamp, sam, honorific, first_name, last_name, address, title, agent_name, agent_address, city, state, zip_code, project_name, project_city, project_county, parcel_id, prefile_date, notice_type, jpn_date, pnot_date, project_description, fee_amount, fee_received, adem_employee, adem_email):
+def perm_LOP(acamp, sam, honorific, first_name, last_name, project_address, title, agent_name, agent_address, city, state, zip, project_name, project_city, project_county, parcel_id, prefile_date, notice_type, jpn_date, pnot_date, project_description, fee_amount, fee_received, adem_employee, adem_email):
     # Import template document
     templatePerm1 = DocxTemplate('templates/LOPW_Temp.docx')
     templatePerm2 = DocxTemplate('templates/LOPC_Temp.docx')
@@ -669,20 +716,17 @@ def perm_LOP(acamp, sam, honorific, first_name, last_name, address, title, agent
     
     # Declare template variables
     context = {
-        'title': 'Automated Report',
-        'day': datetime.datetime.now().strftime('%d'),
-        'month': datetime.datetime.now().strftime('%b'),
-        'year': datetime.datetime.now().strftime('%Y'),
+        
         'Applicant_Honorific': honorific,
         'Applicant_FirstName': first_name,
         'Applicant_LastName': last_name,
-        'Applicant_Address': address,
+        'Applicant_Address': project_address,
         'Applicant_Title': title,
         'Agent_Name': agent_name,
         'Agent_Address': agent_address,
         'ACity': city,
         'AState': state,
-        'AZip': zip_code,
+        'AZip': zip,
         'Project_Name': project_name,
         'Project_City': project_city,
         'Project_County': project_county,
@@ -706,7 +750,7 @@ def perm_LOP(acamp, sam, honorific, first_name, last_name, address, title, agent
         county = ' 002'
     else:
         county = ' xxx'
-
+    insert_data(acamp, context)
     # Render automated report
     templatePerm1.render(context)
     templatePerm1.save('output/xxx ' + acamp + county + ' CZCERT ' + sam + ' CZM.docx')
@@ -719,7 +763,7 @@ def perm_LOP(acamp, sam, honorific, first_name, last_name, address, title, agent
     open_file('output/xxx ' + acamp + county + ' CZCERT ' + sam + ' Rational.docx')
     print("Files successfully generated in the 'output' folder.")
 
-def perm_VAR(acamp, sam, honorific, first_name, last_name, address, title, agent_name, agent_address, city, state, zip_code, project_name, project_city, project_county, parcel_id, prefile_date, notice_type, jpn_date, pnot_date, project_description, fee_amount, fee_received, adem_employee, adem_email,var_code):
+def perm_VAR(acamp, sam, honorific, first_name, last_name, project_address, title, agent_name, agent_address, city, state, zip, project_name, project_city, project_county, parcel_id, prefile_date, notice_type, jpn_date, pnot_date, project_description, fee_amount, fee_received, adem_employee, adem_email,var_code):
     # Import template document
     templatePerm1 = DocxTemplate('templates/LOPW_Temp.docx')
     templatePerm2 = DocxTemplate('templates/VARC_Temp.docx')
@@ -734,20 +778,17 @@ def perm_VAR(acamp, sam, honorific, first_name, last_name, address, title, agent
 
     # Declare template variables
     context = {
-        'title': 'Automated Report',
-        'day': datetime.datetime.now().strftime('%d'),
-        'month': datetime.datetime.now().strftime('%b'),
-        'year': datetime.datetime.now().strftime('%Y'),
+        
         'Applicant_Honorific': honorific,
         'Applicant_FirstName': first_name,
         'Applicant_LastName': last_name,
-        'Applicant_Address': address,
+        'Applicant_Address': project_address,
         'Applicant_Title': title,
         'Agent_Name': agent_name,
         'Agent_Address': agent_address,
         'ACity': city,
         'AState': state,
-        'AZip': zip_code,
+        'AZip': zip,
         'Project_Name': project_name,
         'Project_City': project_city,
         'Project_County': project_county,
@@ -763,10 +804,10 @@ def perm_VAR(acamp, sam, honorific, first_name, last_name, address, title, agent
         'Fee_Received': fee_received,
         'ADEM_Employee': adem_employee,
         'ADEM_Email': adem_email,
-        'var_code': var_code,
-        'Parcel_ID': parcel_id
+        'var_code': var_code
     }
 
+    insert_data(acamp, context)
     # Render automated report
     #Render automated report
     # Render automated report
@@ -782,7 +823,7 @@ def perm_VAR(acamp, sam, honorific, first_name, last_name, address, title, agent
     print("Files successfully generated in the 'output' folder.")
 
 
-def perm_NRU(acamp, sam, honorific, first_name, last_name, address, title, agent_name, agent_address, city, state, zip_code, project_name, project_city, project_county, parcel_id, prefile_date, notice_type, jpn_date, pnot_date, project_description, fee_amount, fee_received, adem_employee, adem_email,npdes_date,npdes_num):
+def perm_NRU(acamp, sam, honorific, first_name, last_name, project_address, title, agent_name, agent_address, city, state, zip, project_name, project_city, project_county, parcel_id, prefile_date, notice_type, jpn_date, pnot_date, project_description, fee_amount, fee_received, adem_employee, adem_email,npdes_date,npdes_num):
     # Import template document
     templaten = DocxTemplate('templates/NRU_Temp.docx')
     templatec = DocxTemplate('templates/LOPC_Temp.docx')
@@ -797,20 +838,17 @@ def perm_NRU(acamp, sam, honorific, first_name, last_name, address, title, agent
 
     # Declare template variables
     context = {
-        'title': 'Automated Report',
-        'day': datetime.datetime.now().strftime('%d'),
-        'month': datetime.datetime.now().strftime('%b'),
-        'year': datetime.datetime.now().strftime('%Y'),
+        
         'Applicant_Honorific': honorific,
         'Applicant_FirstName': first_name,
         'Applicant_LastName': last_name,
-        'Applicant_Address': address,
+        'Applicant_Address': project_address,
         'Applicant_Title': title,
         'Agent_Name': agent_name,
         'Agent_Address': agent_address,
         'ACity': city,
         'AState': state,
-        'AZip': zip_code,
+        'AZip': zip,
         'Project_Name': project_name,
         'Project_City': project_city,
         'Project_County': project_county,
@@ -829,7 +867,7 @@ def perm_NRU(acamp, sam, honorific, first_name, last_name, address, title, agent
         'NPDES_Date': npdes_date,
         'NPDES_Number': npdes_num
     }
-
+    insert_data(acamp, context)
     # Render automated report
     templaten.render(context)
     templaten.save('output/xxx ' + acamp + county + ' NRU ' + sam + ' NRU.docx')
@@ -845,7 +883,7 @@ def perm_NRU(acamp, sam, honorific, first_name, last_name, address, title, agent
     print("Files successfully generated in the 'output' folder.")
 
 
-def perm_TIMEEXT(acamp, sam, honorific, first_name, last_name, address, title, agent_name, agent_address, city, state, zip_code, project_name, project_city, project_county, parcel_id, prefile_date, notice_type, jpn_date, pnot_date, project_description, fee_amount, fee_received, adem_employee, adem_email, exp_date, exp_date1):
+def perm_TIMEEXT(acamp, sam, honorific, first_name, last_name, project_address, title, agent_name, agent_address, city, state, zip, project_name, project_city, project_county, parcel_id, prefile_date, notice_type, jpn_date, pnot_date, project_description, fee_amount, fee_received, adem_employee, adem_email, exp_date, exp_date1):
     # Import template document
     template = DocxTemplate('templates/401EXT_Temp.docx')
     
@@ -855,23 +893,20 @@ def perm_TIMEEXT(acamp, sam, honorific, first_name, last_name, address, title, a
         county = ' 002'
     else:
         county = ' xxx'
-
+    insert_data(acamp, context)
     # Declare template variables
     context = {
-        'title': 'Automated Report',
-        'day': datetime.datetime.now().strftime('%d'),
-        'month': datetime.datetime.now().strftime('%b'),
-        'year': datetime.datetime.now().strftime('%Y'),
+        
         'Applicant_Honorific': honorific,
         'Applicant_FirstName': first_name,
         'Applicant_LastName': last_name,
-        'Applicant_Address': address,
+        'Applicant_Address': project_address,
         'Applicant_Title': title,
         'Agent_Name': agent_name,
         'Agent_Address': agent_address,
         'ACity': city,
         'AState': state,
-        'AZip': zip_code,
+        'AZip': zip,
         'Project_Name': project_name,
         'Project_City': project_city,
         'Project_County': project_county,
@@ -936,30 +971,39 @@ def get_inspr_values():
 
 
     context = {
-        'title': 'Automated Report',
-        'day': datetime.datetime.now().strftime('%d'),
-        'month': datetime.datetime.now().strftime('%b'),
-        'year': datetime.datetime.now().strftime('%Y'),
+        
         'time_in': timein.get(),
         'time_out': timeout.get(),
-        'Applicant_FirstName': firstname.get(),
-        'Applicant_LastName': lastname.get(),
+        'Applicant_FirstName': first_name.get(),
+        'Applicant_LastName': last_name.get(),
         'Applicant_Phone': phone.get(),
-        'Applicant_Address': address.get(),
+        'Applicant_Address': project_address.get(),
         'Proj_Cords': projcoords.get(),
         'Proj_Complaint': complaint.get(),
-        'Project_Name': projectname.get(),
-        'Project_City': projectcity.get(),
-        'Project_County': projectcounty.get(),
+        'Project_Name': project_name.get(),
+        'Project_City': project_city.get(),
+        'Project_County': project_county.get(),
         'SAM_Number': sam.get(),
         'ACAMP_Number': acamp.get(),
         'Project_Desc': comments.get(1.0, ttk.END),
         'Photos': photos.get(),
         'Other_Names': participants.get(),
-        'ADEM_Employee': yourname.get(),
-        'ADEM_Email': youremail.get()
+        'ADEM_Employee': adem_employee.get(),
+        'ADEM_Email': adem_email.get()
     }
 
+    data = {'Applicant_FirstName': first_name.get(),
+        'Applicant_LastName': last_name.get(),
+        'Applicant_Address': project_address.get(),
+        'Project_Name': project_name.get(),
+        'Project_City': project_city.get(),
+        'Project_County': project_county.get(),
+        'SAM_Number': sam.get(),
+        'ACAMP_Number': acamp.get(),
+        'Project_Description': comments.get(1.0, ttk.END),
+        'ADEM_Employee': adem_employee.get(),
+        'ADEM_Email': adem_email.get()}
+    insert_data(acamp.get(), context)
     # Render automated report
     template.render(context)
         
@@ -972,15 +1016,6 @@ def get_inspr_values():
 
 # Inspection Report Window
 def open_inspr_window():
-
-    global honorific, firstname, lastname, title, address
-    global timein, timeout, complaint, projcoords
-    global city, state, zip
-    global projectname, projectcity, projectcounty
-    global phone, comments, photos, participants
-    global yourname, youremail, sam, acamp
-    global inspr
-
     # Inspection Report Window
     inspr = ttk.Toplevel()
     inspr.title("ADEM Coastal Document Genie")
@@ -989,6 +1024,17 @@ def open_inspr_window():
     greeting = ttk.Label(inspr, text="Please provide the following information:")
     greeting.pack(padx=text_padding, pady=text_padding)
 
+    database_button = ttk.Button(inspr, text = 'Load from Database', command = show_data)
+    database_button.pack()
+    global honorific, first_name, last_name, title, project_address
+    global agent_name, agent_address
+    global city, state
+    global project_name, project_city, project_county
+    global fee_amount, projcoords
+    global adem_employee, adem_email, sam, acamp
+    global timein, timeout, complaint
+    global phone, comments, photos, participants
+    
     # Frame for left column
     left_frame = ttk.Frame(inspr, )
     left_frame.pack(side=ttk.LEFT, padx=10)
@@ -1003,6 +1049,8 @@ def open_inspr_window():
     acamp = ttk.Entry(left_frame)
     acamp.bind("<Control-BackSpace>", delete_previous_word)
     acamp.pack(padx=text_padding, pady=text_padding)
+
+    honorific = ttk.Entry(left_frame)
 
     sam_label = ttk.Label(left_frame, text="SAM Number:")
     sam_label.pack(padx=text_padding, pady=text_padding)
@@ -1024,15 +1072,15 @@ def open_inspr_window():
 
     firstname_label = ttk.Label(left_frame, text="Applicant First Name:")
     firstname_label.pack(padx=text_padding, pady=text_padding)
-    firstname = ttk.Entry(left_frame)
-    firstname.bind("<Control-BackSpace>", delete_previous_word)
-    firstname.pack(padx=text_padding, pady=text_padding)
+    first_name = ttk.Entry(left_frame)
+    first_name.bind("<Control-BackSpace>", delete_previous_word)
+    first_name.pack(padx=text_padding, pady=text_padding)
 
     lastname_label = ttk.Label(left_frame, text="Applicant Last Name:")
     lastname_label.pack(padx=text_padding, pady=text_padding)
-    lastname = ttk.Entry(left_frame)
-    lastname.bind("<Control-BackSpace>", delete_previous_word)
-    lastname.pack(padx=text_padding, pady=text_padding)
+    last_name = ttk.Entry(left_frame)
+    last_name.bind("<Control-BackSpace>", delete_previous_word)
+    last_name.pack(padx=text_padding, pady=text_padding)
 
     complaint_label = ttk.Label(left_frame, text="Complaint #:")
     complaint_label.pack(padx=text_padding, pady=text_padding)
@@ -1048,9 +1096,9 @@ def open_inspr_window():
 
     address_label = ttk.Label(left_frame, text="Applicant Address:")
     address_label.pack(padx=text_padding, pady=text_padding)
-    address = ttk.Entry(left_frame)
-    address.bind("<Control-BackSpace>", delete_previous_word)
-    address.pack(padx=text_padding, pady=text_padding)
+    project_address = ttk.Entry(left_frame)
+    project_address.bind("<Control-BackSpace>", delete_previous_word)
+    project_address.pack(padx=text_padding, pady=text_padding)
 
     projcoords_label = ttk.Label(right_frame, text="Project Coordinates:")
     projcoords_label.pack(padx=text_padding, pady=text_padding)
@@ -1058,23 +1106,23 @@ def open_inspr_window():
     projcoords.bind("<Control-BackSpace>", delete_previous_word)
     projcoords.pack(padx=text_padding, pady=text_padding)
 
-    projectname_label = ttk.Label(right_frame, text="Project Name:")
-    projectname_label.pack(padx=text_padding, pady=text_padding)
-    projectname = ttk.Entry(right_frame)
-    projectname.bind("<Control-BackSpace>", delete_previous_word)
-    projectname.pack(padx=text_padding, pady=text_padding)
+    project_name_label = ttk.Label(right_frame, text="Project Name:")
+    project_name_label.pack(padx=text_padding, pady=text_padding)
+    project_name = ttk.Entry(right_frame)
+    project_name.bind("<Control-BackSpace>", delete_previous_word)
+    project_name.pack(padx=text_padding, pady=text_padding)
 
-    projectcity_label = ttk.Label(right_frame, text="Project City:")
-    projectcity_label.pack(padx=text_padding, pady=text_padding)
-    projectcity = ttk.Entry(right_frame)
-    projectcity.bind("<Control-BackSpace>", delete_previous_word)
-    projectcity.pack(padx=text_padding, pady=text_padding)
+    project_city_label = ttk.Label(right_frame, text="Project City:")
+    project_city_label.pack(padx=text_padding, pady=text_padding)
+    project_city = ttk.Entry(right_frame)
+    project_city.bind("<Control-BackSpace>", delete_previous_word)
+    project_city.pack(padx=text_padding, pady=text_padding)
 
-    projectcounty_label = ttk.Label(right_frame, text="Project County:")
-    projectcounty_label.pack(padx=text_padding, pady=text_padding)
-    projectcounty = ttk.Entry(right_frame)
-    projectcounty.bind("<Control-BackSpace>", delete_previous_word)
-    projectcounty.pack(padx=text_padding, pady=text_padding)
+    project_county_label = ttk.Label(right_frame, text="Project County:")
+    project_county_label.pack(padx=text_padding, pady=text_padding)
+    project_county = ttk.Entry(right_frame)
+    project_county.bind("<Control-BackSpace>", delete_previous_word)
+    project_county.pack(padx=text_padding, pady=text_padding)
 
     photos_label = ttk.Label(right_frame, text="Photos Taken? (Yes/No):")
     photos_label.pack(padx=text_padding, pady=text_padding)
@@ -1106,26 +1154,25 @@ def open_inspr_window():
     def callback(*args):
         for i in permitters:
             if clicked.get() == permitters.get(i)[0]:
-                print(permitters[i])
-                youremail.delete(0,ttk.END)
-                yourname.delete(0,ttk.END)
-                yourname.insert(0, permitters[i][0])
-                youremail.insert(0, permitters[i][1])
+                adem_email.delete(0,ttk.END)
+                adem_employee.delete(0,ttk.END)
+                adem_employee.insert(0, permitters[i][0])
+                adem_email.insert(0, permitters[i][1])
         
 
     clicked.trace("w", callback)
 
     yourname_label = ttk.Label(right_frame, text="Your Name:")
     yourname_label.pack(padx=text_padding, pady=text_padding)
-    yourname = ttk.Entry(right_frame)
-    yourname.bind("<Control-BackSpace>", delete_previous_word)
-    yourname.pack(padx=text_padding, pady=text_padding)
+    adem_employee = ttk.Entry(right_frame)
+    adem_employee.bind("<Control-BackSpace>", delete_previous_word)
+    adem_employee.pack(padx=text_padding, pady=text_padding)
 
     youremail_label = ttk.Label(right_frame, text="Your Email:")
     youremail_label.pack(padx=text_padding, pady=text_padding)
-    youremail = ttk.Entry(right_frame)
-    youremail.bind("<Control-BackSpace>", delete_previous_word)
-    youremail.pack(padx=text_padding, pady=text_padding)
+    adem_email = ttk.Entry(right_frame)
+    adem_email.bind("<Control-BackSpace>", delete_previous_word)
+    adem_email.pack(padx=text_padding, pady=text_padding)
 
 
     comments_label = ttk.Label(inspr, text="Comments/Site Observations:")
@@ -1147,29 +1194,28 @@ def get_feel_values():
     template = DocxTemplate('templates/FEEL_Temp.docx')
 
     context = {
-        'title': 'Automated Report',
-        'day': datetime.datetime.now().strftime('%d'),
-        'month': datetime.datetime.now().strftime('%b'),
-        'year': datetime.datetime.now().strftime('%Y'),
+        
         'Applicant_Honorific': honorific.get(),
-        'Applicant_FirstName': firstname.get(),
-        'Applicant_LastName': lastname.get(),
-        'Applicant_Address': address.get(),
+        'Applicant_FirstName': first_name.get(),
+        'Applicant_LastName': last_name.get(),
+        'Applicant_Address': project_address.get(),
         'Applicant_Title': title.get(),
-        'Agent_Name': agentname.get(),
-        'Agent_Address': agentaddress.get(),
+        'Agent_Name': agent_name.get(),
+        'Agent_Address': agent_address.get(),
         'ACity': city.get(),
         'AState': state.get(),
         'AZip': zip.get(),
-        'Project_Name': projectname.get(),
-        'Project_City': projectcity.get(),
-        'Project_County': projectcounty.get(),
+        'Project_Name': project_name.get(),
+        'Project_City': project_city.get(),
+        'Project_County': project_county.get(),
         'SAM_Number': sam.get(),
         'ACAMP_Number': acamp.get(),
-        'FEE_Amount': feeamount.get(),
-        'ADEM_Employee': yourname.get(),
-        'ADEM_Email': youremail.get()
+        'FEE_Amount': fee_amount.get(),
+        'ADEM_Employee': adem_employee.get(),
+        'ADEM_Email': adem_email.get()
     }
+
+    insert_data(acamp.get(), context)
     #Render automated report
     template.render(context)
     template.save('output/XXX ' + " " + context.get('ACAMP_Number') + " " + context.get('SAM_Number') + ' _FEEL.docx')
@@ -1180,6 +1226,15 @@ def get_feel_values():
 
 def open_feel_window():
     global feel    
+    global honorific, first_name, last_name, title, project_address
+    global agent_name, agent_address
+    global city, state, zip
+    global project_name, project_city, project_county
+    global fee_amount, projcoords
+    global adem_employee, adem_email, sam, acamp
+    global timein, timeout, complaint
+    global phone, comments, photos, participants
+   
 
     # Fee Letter Window
     feel = ttk.Toplevel()
@@ -1197,12 +1252,10 @@ def open_feel_window():
     subtypes = document_types[chosen_type]
     greeting = ttk.Label(left_frame, text="Please provide the following information: ", )
     greeting.pack(padx=text_padding, pady=text_padding)
-    global honorific, firstname, lastname, title, address
-    global agentname, agentaddress
-    global city, state, zip
-    global projectname, projectcity, projectcounty
-    global feeamount
-    global yourname, youremail, sam, acamp
+
+    database_button = ttk.Button(left_frame, text = 'Load from Database', command = show_data)
+    database_button.pack()
+
 
     # Create input fields
     sam_label = ttk.Label(right_frame, text="SAM Number:")
@@ -1225,21 +1278,21 @@ def open_feel_window():
 
     firstname_label = ttk.Label(left_frame, text="Applicant First Name:")
     firstname_label.pack(pady=text_padding)
-    firstname = ttk.Entry(left_frame)
-    firstname.bind("<Control-BackSpace>", delete_previous_word)
-    firstname.pack(padx=text_padding, pady=text_padding)
+    first_name = ttk.Entry(left_frame)
+    first_name.bind("<Control-BackSpace>", delete_previous_word)
+    first_name.pack(padx=text_padding, pady=text_padding)
 
     lastname_label = ttk.Label(left_frame, text="Applicant Last Name:")
     lastname_label.pack(pady=text_padding)
-    lastname = ttk.Entry(left_frame)
-    lastname.bind("<Control-BackSpace>", delete_previous_word)
-    lastname.pack(padx=text_padding, pady=text_padding)
+    last_name = ttk.Entry(left_frame)
+    last_name.bind("<Control-BackSpace>", delete_previous_word)
+    last_name.pack(padx=text_padding, pady=text_padding)
 
     address_label = ttk.Label(left_frame, text="Applicant Address:")
     address_label.pack(pady=text_padding)
-    address = ttk.Entry(left_frame)
-    address.bind("<Control-BackSpace>", delete_previous_word)
-    address.pack(padx=text_padding, pady=text_padding)
+    project_address = ttk.Entry(left_frame)
+    project_address.bind("<Control-BackSpace>", delete_previous_word)
+    project_address.pack(padx=text_padding, pady=text_padding)
 
     title_label = ttk.Label(left_frame, text="Applicant Title or Company:")
     title_label.pack(pady=text_padding)
@@ -1249,15 +1302,15 @@ def open_feel_window():
 
     agentname_label = ttk.Label(left_frame, text="Agent Full Name:")
     agentname_label.pack(pady=text_padding)
-    agentname = ttk.Entry(left_frame)
-    agentname.bind("<Control-BackSpace>", delete_previous_word)
-    agentname.pack(padx=text_padding, pady=text_padding)
+    agent_name = ttk.Entry(left_frame)
+    agent_name.bind("<Control-BackSpace>", delete_previous_word)
+    agent_name.pack(padx=text_padding, pady=text_padding)
 
     agentaddress_label = ttk.Label(left_frame, text="Agent Address:")
     agentaddress_label.pack(pady=text_padding)
-    agentaddress = ttk.Entry(left_frame)
-    agentaddress.bind("<Control-BackSpace>", delete_previous_word)
-    agentaddress.pack(padx=text_padding, pady=text_padding)
+    agent_address = ttk.Entry(left_frame)
+    agent_address.bind("<Control-BackSpace>", delete_previous_word)
+    agent_address.pack(padx=text_padding, pady=text_padding)
 
     city_label = ttk.Label(left_frame, text="City:")
     city_label.pack(pady=text_padding)
@@ -1277,29 +1330,29 @@ def open_feel_window():
     zip.bind("<Control-BackSpace>", delete_previous_word)
     zip.pack(padx=text_padding, pady=text_padding)
 
-    projectname_label = ttk.Label(right_frame, text="Project Name:")
-    projectname_label.pack(pady=text_padding)
-    projectname = ttk.Entry(right_frame)
-    projectname.bind("<Control-BackSpace>", delete_previous_word)
-    projectname.pack(padx=text_padding, pady=text_padding)
+    project_name_label = ttk.Label(right_frame, text="Project Name:")
+    project_name_label.pack(pady=text_padding)
+    project_name = ttk.Entry(right_frame)
+    project_name.bind("<Control-BackSpace>", delete_previous_word)
+    project_name.pack(padx=text_padding, pady=text_padding)
 
-    projectcity_label = ttk.Label(right_frame, text="Project City:")
-    projectcity_label.pack(pady=text_padding)
-    projectcity = ttk.Entry(right_frame)
-    projectcity.bind("<Control-BackSpace>", delete_previous_word)
-    projectcity.pack(padx=text_padding, pady=text_padding)
+    project_city_label = ttk.Label(right_frame, text="Project City:")
+    project_city_label.pack(pady=text_padding)
+    project_city = ttk.Entry(right_frame)
+    project_city.bind("<Control-BackSpace>", delete_previous_word)
+    project_city.pack(padx=text_padding, pady=text_padding)
 
-    projectcounty_label = ttk.Label(right_frame, text="Project County:")
-    projectcounty_label.pack(pady=text_padding)
-    projectcounty = ttk.Entry(right_frame)
-    projectcounty.bind("<Control-BackSpace>", delete_previous_word)
-    projectcounty.pack(padx=text_padding, pady=text_padding)
+    project_county_label = ttk.Label(right_frame, text="Project County:")
+    project_county_label.pack(pady=text_padding)
+    project_county = ttk.Entry(right_frame)
+    project_county.bind("<Control-BackSpace>", delete_previous_word)
+    project_county.pack(padx=text_padding, pady=text_padding)
 
     feeamount_label = ttk.Label(right_frame, text="Fee Amount Due:")
     feeamount_label.pack(pady=text_padding)
-    feeamount = ttk.Entry(right_frame)
-    feeamount.bind("<Control-BackSpace>", delete_previous_word)
-    feeamount.pack(padx=text_padding, pady=text_padding)
+    fee_amount = ttk.Entry(right_frame)
+    fee_amount.bind("<Control-BackSpace>", delete_previous_word)
+    fee_amount.pack(padx=text_padding, pady=text_padding)
 
     # Button to retrieve input values
     file_path=".\Fee_List.pdf"
@@ -1325,26 +1378,25 @@ def open_feel_window():
     def callback(*args):
         for i in permitters:
             if clicked.get() == permitters.get(i)[0]:
-                print(permitters[i])
-                youremail.delete(0,ttk.END)
-                yourname.delete(0,ttk.END)
-                yourname.insert(0, permitters[i][0])
-                youremail.insert(0, permitters[i][1])
+                adem_email.delete(0,ttk.END)
+                adem_employee.delete(0,ttk.END)
+                adem_employee.insert(0, permitters[i][0])
+                adem_email.insert(0, permitters[i][1])
         
 
     clicked.trace("w", callback)
 
     yourname_label = ttk.Label(right_frame, text="Your Name:")
     yourname_label.pack(pady=text_padding)
-    yourname = ttk.Entry(right_frame)
-    yourname.bind("<Control-BackSpace>", delete_previous_word)
-    yourname.pack(padx=text_padding, pady=text_padding)
+    adem_employee = ttk.Entry(right_frame)
+    adem_employee.bind("<Control-BackSpace>", delete_previous_word)
+    adem_employee.pack(padx=text_padding, pady=text_padding)
 
     youremail_label = ttk.Label(right_frame, text="Your Email:")
     youremail_label.pack(pady=text_padding)    
-    youremail = ttk.Entry(right_frame)
-    youremail.bind("<Control-BackSpace>", delete_previous_word)
-    youremail.pack(padx=text_padding, pady=text_padding)
+    adem_email = ttk.Entry(right_frame)
+    adem_email.bind("<Control-BackSpace>", delete_previous_word)
+    adem_email.pack(padx=text_padding, pady=text_padding)
     
     # Button to retrieve input values
     submit_button = ttk.Button(right_frame, text="Submit", command=get_feel_values)
@@ -1353,11 +1405,371 @@ def open_feel_window():
     
 #END FEE SHEET
 
+#create DB
+def create_database():
+    db_exists = os.path.exists('database.db')
+    if not db_exists:
+        # Connect to the database (this will create it)
+        conn = sqlite3.connect('database.db')
+        c = conn.cursor()
+
+        # Create the table
+        c.execute("""
+            CREATE TABLE applicants (
+                ACAMP_Number TEXT,
+                SAM_Number TEXT,
+                Project_Name TEXT,
+                Project_Location TEXT,
+                Project_City TEXT,
+                Project_County TEXT,
+                Project_Description TEXT,
+                var_code TEXT,
+                Parcel_ID TEXT,
+                Applicant_Honorific TEXT,
+                Applicant_FirstName TEXT,
+                Applicant_LastName TEXT,
+                Applicant_Address TEXT,
+                Applicant_Title TEXT,
+                Agent_Name TEXT,
+                Agent_Address TEXT,
+                ACity TEXT,
+                AState TEXT,
+                AZip REAL,
+                Prefile_Date TEXT,
+                Notice_Type TEXT,
+                JPN_Date TEXT,
+                PNOT_Date TEXT,
+                Fee_Amount REAL,
+                Fee_Received REAL,
+                Expiration_Date TEXT,
+                New_Expiration TEXT,
+                NPDES_Date TEXT,
+                NPDES_Number TEXT,
+                ADEM_Employee TEXT,
+                ADEM_Email TEXT
+            )
+        """)
+
+        c.execute("""
+            CREATE TABLE settings (
+                Dark INTEGER
+            )
+        """)
+
+        c.execute(f"INSERT INTO settings (Dark) VALUES (0)")
+
+        # Commit the changes and close the connection
+        conn.commit()
+        conn.close()
+
+def get_data():
+    conn = sqlite3.connect('database.db')
+    c = conn.cursor()
+    c.execute("SELECT ACAMP_Number, SAM_Number, Project_Name, Project_Location, Project_City, Project_County FROM applicants")
+    data = c.fetchall()
+    conn.close()
+    return data
+
+def get_data2():
+    conn = sqlite3.connect('database.db')
+    c = conn.cursor()
+    c.execute("SELECT * FROM applicants")
+    data = c.fetchall()
+    conn.close()
+    return data
+
+
+def insert_data(acamp_number, data):
+    # Connect to the database
+    conn = sqlite3.connect('database.db')
+    c = conn.cursor()
+
+    # Check if a row with the matching ACAMP number exists
+    c.execute("SELECT * FROM applicants WHERE ACAMP_Number=?", (acamp_number,))
+    row = c.fetchone()
+
+    if row is not None:
+        # If a match is found, update the row with new data
+        columns = ', '.join(f"{column}=?" for column in data.keys())
+        sql = f"UPDATE applicants SET {columns} WHERE ACAMP_Number=?"
+        c.execute(sql, list(data.values()) + [acamp_number])
+    else:
+        # If no match is found, insert a new row with the new data
+        columns = ', '.join(data.keys())
+        placeholders = ', '.join('?' * len(data))
+        sql = f"INSERT INTO applicants ({columns}) VALUES ({placeholders})"
+        c.execute(sql, list(data.values()))
+
+    # Commit the changes and close the connection
+    conn.commit()
+    conn.close()
+
+def show_data():
+    data = ttk.Toplevel()
+    tree = ttk.Treeview(data)    
+
+    # Define the column names
+    columns = ['ACAMP #', 'SAM #', 'Project Name', 'Address', 'City', 'County']
+    
+    search_label = ttk.Label(data, text="Search")
+    search_val = ttk.StringVar()
+    search = ttk.Entry(data, textvariable=search_val)
+    search_label.pack()
+    search.pack()
+
+    # Create the columns
+    tree["columns"] = columns
+    for column in columns:
+        tree.column(column, width=100)
+        tree.heading(column, text=column)
+        tree.heading(column,anchor=tk.W)
+    
+    tree.column('#0', width=0)
+
+    def replace_field(widget,text):
+        if text != None:
+            widget.delete(tk.INSERT,tk.END)
+            widget.insert(tk.INSERT,text)
+    
+
+    def onDoubleClick(event):
+        global honorific, first_name, last_name, title, project_address
+        global agent_name, agent_address
+        global city, state, zip
+        global project_name, project_city, project_county
+        global fee_amount, projcoords
+        global adem_employee, adem_email, sam, acamp
+        global timein, timeout, complaint, project_description
+        global phone, comments, photos, participants, parcel_id
+        item = tree.selection()[0]
+        values=tree.item(item,"values")
+        for datum in get_data2():
+            if datum[0] == values[0]:
+                try:    
+                    if acamp.winfo_exists:
+                        replace_field(acamp, datum[0])
+                except NameError:
+                    pass
+                except AttributeError:
+                    pass 
+                except Exception:
+                    pass  
+                try:        
+                    if sam.winfo_exists:
+                        replace_field(sam, datum[1])
+                except NameError:
+                    pass
+                except AttributeError:
+                    pass 
+                except Exception:
+                    pass   
+                try:
+                    if project_name.winfo_exists:
+                        replace_field(project_name, datum[2])
+                except NameError:
+                    pass
+                except AttributeError:
+                    pass 
+                except Exception:
+                    pass   
+                try:    
+                    if honorific.winfo_exists:
+                        replace_field(honorific, datum[9])
+                except NameError:
+                    pass
+                except AttributeError:
+                    pass
+                except Exception:
+                    pass    
+                try:
+                    if first_name.winfo_exists:
+                        replace_field(first_name, datum[10])
+                except NameError:
+                    pass
+                except AttributeError:
+                    pass
+                except Exception:
+                    pass      
+                try:    
+                    if last_name.winfo_exists:
+                        replace_field(last_name, datum[11])
+                except NameError:
+                    pass
+                except AttributeError:
+                    pass
+                except Exception:
+                    pass      
+                try:    
+                    if project_address.winfo_exists:
+                        replace_field(project_address, datum[3])
+                except NameError:
+                    pass
+                except AttributeError:
+                    pass
+                except Exception:
+                    pass      
+                try:    
+                    if title.winfo_exists:
+                        replace_field(title, datum[13])
+                except NameError:
+                    pass
+                except AttributeError:
+                    pass
+                except Exception:
+                    pass      
+                try:
+                    if agent_name.winfo_exists:
+                        replace_field(agent_name, datum[14])
+                except NameError:
+                    pass
+                except AttributeError:
+                    pass
+                except Exception:
+                    pass      
+                try:
+                    if agent_address.winfo_exists:
+                        replace_field(agent_address, datum[15])
+                except NameError:
+                    pass
+                except AttributeError:
+                    pass
+                except Exception:
+                    pass      
+                try:
+                    if city.winfo_exists:
+                        replace_field(city, datum[16])
+                except NameError:
+                    pass
+                except AttributeError:
+                    pass
+                except Exception:
+                    pass      
+                try:
+                    if state.winfo_exists:
+                        replace_field(state, datum[17])
+                except NameError:
+                    pass
+                except AttributeError:
+                    pass
+                except Exception:
+                    pass      
+                try:
+                    if zip.winfo_exists:
+                        replace_field(zip, datum[18])
+                except NameError:
+                    pass
+                except AttributeError:
+                    pass
+                except Exception:
+                    pass      
+                try:
+                    if project_city.winfo_exists:
+                        replace_field(project_city, datum[4])
+                except NameError:
+                    pass
+                except AttributeError:
+                    pass  
+                except Exception:
+                    pass    
+                try:
+                    if project_county.winfo_exists:
+                        replace_field(project_county, datum[5])
+                except NameError:
+                    pass
+                except AttributeError:
+                    pass 
+                except Exception:
+                    pass  
+                try:
+                    if fee_amount.winfo_exists:
+                        replace_field(fee_amount, datum[23])
+                except NameError:
+                    pass
+                except AttributeError:
+                    pass    
+                except Exception:
+                    pass  
+                try:
+                    if adem_email.winfo_exists:
+                        replace_field(adem_email, datum[30])
+                except NameError:
+                    pass
+                except AttributeError:
+                    pass   
+                except Exception:
+                    pass   
+                try:
+                    if adem_employee.winfo_exists:
+                        replace_field(adem_employee, datum[29])
+                except NameError:
+                    pass
+                except AttributeError:
+                    pass   
+                except Exception:
+                    pass  
+                try:
+                    if parcel_id.winfo_exists:
+                        replace_field(parcel_id, datum[8])
+                except NameError:
+                    pass
+                except AttributeError:
+                    pass
+                except Exception:
+                    pass  
+                try:
+                    if project_description.winfo_exists:
+                        replace_field(project_description, datum[6])
+                except NameError:
+                    pass
+                except AttributeError:
+                    pass      
+                except Exception:
+                    pass  
+
+
+    def search_data(*args):
+        search_term = search_val.get()
+        conn = sqlite3.connect('database.db')
+        c = conn.cursor()
+        c.execute("SELECT ACAMP_Number, SAM_Number, Project_Name, Project_Location, Project_City, Project_County FROM applicants WHERE ACAMP_Number LIKE ? OR SAM_Number LIKE ?", ('%'+search_term+'%', '%'+search_term+'%'))
+        data = c.fetchall()
+        conn.close()
+        return data
+
+    def on_search_change(*args):
+        if search_val.get():
+            data = search_data(args)
+            tree.delete(*tree.get_children())
+            for row in data:
+                tree.insert('', 'end', values=row)
+        else:
+            data = get_data()
+            tree.delete(*tree.get_children())
+            for row in data:
+                tree.insert('', 'end', values=row)
+        print(search_val.get())
+        tree.pack()
+        tree.bind("<Double-1>", onDoubleClick)
+
+
+    search_val.trace(mode="w", callback = on_search_change)
+                        
+
+        
+    # Insert the data
+    data = get_data()
+    for row in data:
+        tree.insert('', 'end', values=row)
+    
+    tree.pack()
+    tree.bind("<Double-1>", onDoubleClick)
+
 
 
 #Main Screen Contents
 greeting = ttk.Label(text="What do you want to generate?")
 greeting.pack(padx=text_padding, pady=text_padding)
+create_database()
 
 for i, document_type in enumerate(document_types.keys()):
     document_button = ttk.Button(main, text=f"{i+1}. {document_type}")
@@ -1371,8 +1783,21 @@ for i, document_type in enumerate(document_types.keys()):
     elif document_type == "Inspection Report":
         document_button.configure(command=open_inspr_window)
 
+database_button = ttk.Button(main, text = 'View Database', command = show_data, bootstyle="warning")
+database_button.pack()
+
+#Check Dark Mode
 style = ttk.Style()
+conn = sqlite3.connect('database.db')
+c = conn.cursor()
+c.execute("SELECT Dark FROM settings")
+data = c.fetchall()  
 darkmode = ttk.Checkbutton(main, text='Dark Mode', variable=windowcolor, onvalue = 'darkly', offvalue='yeti', command=toggle_dark_mode)
-darkmode.pack()
+if os.path.exists('database.db'):
+    if data[0][0] == 1:
+        darkmode.invoke()
+        toggle_dark_mode()
+    darkmode.pack()
+    conn.close()
 
 main.mainloop()
