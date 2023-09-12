@@ -12,6 +12,7 @@ from docxtpl import DocxTemplate, InlineImage
 from docx import Document
 from PIL import ImageTk, Image
 from pdf2image import convert_from_path
+import win32com.client
 
 # Main Configuration
 
@@ -38,7 +39,7 @@ document_types = {
         "No Permit Required": None
     }
 }
-
+icon = r"free.ico"
 #list of active permitters
 permitters = {
     0:["Choose",''],
@@ -50,10 +51,10 @@ permitters = {
 
 text_padding = 5
 main = ttk.Window(themename='yeti')
+main.iconbitmap(icon)
 main.title("ADEM Coastal Document Genie")
 windowcolor = tk.StringVar()
 windowcolor.set('yeti')
-main.iconbitmap("free.ico")
 style = ttk.Style()
 countynum = ""
 
@@ -89,6 +90,7 @@ def display_pdf(pdf_path):
     feesheet = ttk.Toplevel()
     feesheet.title("Fee Sheet")
     feesheet.geometry('800x850')
+    feesheet.iconbitmap(icon)
 
     # Create a Canvas widget to display the PDF pages
     canvas = ttk.Canvas(feesheet, bg="white")
@@ -153,10 +155,30 @@ def render_document(template, context, acamp, sam="", county="",perm_type="", do
         countynum = ' 002'
     else:
         countynum = ' xxx'
-    filename ='output/xxx' + acamp +' '+ countynum +' '+ perm_type +' '+ sam +' '+ doc_type +'.docx'
+    date = datetime.date.today()
+    date.strftime("%m-%d-%y")
+    filename ='output/xxx ' + acamp +' '+ countynum +' ' +str(date)+ ' ' + perm_type +' '+ sam +' '+ doc_type +'.docx'
     template.save(filename.format(acamp))
     open_file(filename)
     print("Files successfully generated in /output/ folder.")
+
+def send_email(subject_data, to_data, body_data):
+    outlook = win32com.client.Dispatch("Outlook.Application")
+    namespace = outlook.getNamespace("MAPI")
+
+    drafts_folder = namespace.GetDefaultFolder(16)
+
+    new_mail = outlook.CreateItem(0)
+
+    new_mail.Subject = subject_data
+    new_mail.Body = body_data
+    new_mail.To = to_data
+
+    try:
+        new_mail.Save()
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
 
 
 #BEGIN PNOT WINDOW
@@ -172,7 +194,7 @@ def open_pnotinput_window():
     global phone, comments, photos, participants
     pnot1 = ttk.Toplevel()
     pnot1.title("ADEM Coastal Document Genie")
-    pnot1.iconbitmap("free.ico")
+    pnot1.iconbitmap(icon)
 
     pnot1.bind('<Return>', lambda event: get_pnot_values(acamp.get(), sam.get(), project_name.get(), project_address.get(), project_city.get(), project_county.get(), project_description.get(1.0, ttk.END), var_code.get(), parcel_id.get(), federal_agency.get()))
 
@@ -291,8 +313,17 @@ def pnot_BSSE(acamp, project_name, project_address, project_city, project_county
         'Project_County': project_county
     }
 
+    
+
     insert_data(acamp, context)
     render_document(template, context, acamp, sam="", county=project_county ,perm_type="", doc_type="BSSE_PNOT")
+    paperlist = ''
+    if project_county == 'Baldwin':
+        paperlist = 'The Islander\nLagniappe'
+    else:
+        paperlist = 'Lagniappe'
+    body = "For Publication.\n" + paperlist +"\nThank you, Kelly!"
+    send_email('COASTAL PROGRAM • PNOT • '+acamp,'KBozeman@adem.alabama.gov',body)
 
 
 def pnot_VAR(acamp, sam, project_name, project_address, project_city, project_county,project_description,var_code,parcel_id):
@@ -311,6 +342,13 @@ def pnot_VAR(acamp, sam, project_name, project_address, project_city, project_co
 
     insert_data(acamp, context)
     render_document(template, context, acamp, sam, county=project_county ,perm_type="", doc_type="VAR_PNOT")
+    paperlist = ''
+    if project_county == 'Baldwin':
+        paperlist = 'The Islander\nLagniappe'
+    else:
+        paperlist = 'Lagniappe'
+    body = "For Publication.\n" + paperlist +"\nThank you, Kelly!"
+    send_email('COASTAL PROGRAM • PNOT • '+acamp,'KBozeman@adem.alabama.gov',body)
 
 def pnot_NRU(acamp, sam, project_name, project_address, project_city, project_county,project_description):
     template = DocxTemplate('templates/NRUPNOT_Temp.docx')
@@ -328,6 +366,13 @@ def pnot_NRU(acamp, sam, project_name, project_address, project_city, project_co
     insert_data(acamp, context)
 
     render_document(template, context, acamp, sam, county=project_county ,perm_type="", doc_type="NRU_PNOT")
+    paperlist = ''
+    if project_county == 'Baldwin':
+        paperlist = 'The Islander\nLagniappe'
+    else:
+        paperlist = 'Lagniappe'
+    body = "For Publication.\n" + paperlist +"\nThank you, Kelly!"
+    send_email('COASTAL PROGRAM • PNOT • '+acamp,'KBozeman@adem.alabama.gov',body)
 
 def pnot_FAA(acamp, project_address, project_city, project_county, federal_agency, project_description):
     template = DocxTemplate('templates/FAAPNOT_Temp.docx')
@@ -341,6 +386,13 @@ def pnot_FAA(acamp, project_address, project_city, project_county, federal_agenc
     }
     insert_data(acamp, context)
     render_document(template, context, acamp, sam, county=project_county ,perm_type="", doc_type="FAA_PNOT")
+    paperlist = ''
+    if project_county == 'Baldwin':
+        paperlist = 'The Islander\nLagniappe'
+    else:
+        paperlist = 'Lagniappe'
+    body = "For Publication.\n" + paperlist +"\nThank you, Kelly!"
+    send_email('COASTAL PROGRAM • PNOT • '+acamp,'KBozeman@adem.alabama.gov',body)
 
 def pnot_LOP(acamp, sam, project_name, project_address, project_city, project_county,project_description):
     template = DocxTemplate('templates/LOPPNOT_Temp.docx')
@@ -355,6 +407,13 @@ def pnot_LOP(acamp, sam, project_name, project_address, project_city, project_co
     }
     insert_data(acamp, context)
     render_document(template, context, acamp, sam, county=project_county ,perm_type="", doc_type="LOP_PNOT")
+    paperlist = ''
+    if project_county == 'Baldwin':
+        paperlist = 'The Islander\nLagniappe'
+    else:
+        paperlist = 'Lagniappe'
+    body = "For Publication.\n" + paperlist +"\nThank you, Kelly!"
+    send_email('COASTAL PROGRAM • PNOT • '+acamp,'KBozeman@adem.alabama.gov',body)
 
 def pnot_OCS(acamp, project_name, project_address, project_description):
     template = DocxTemplate('templates/OCSPNOT_Temp.docx')
@@ -366,6 +425,13 @@ def pnot_OCS(acamp, project_name, project_address, project_description):
     }
     insert_data(acamp, context)
     render_document(template, context, acamp, sam, county=project_county ,perm_type="", doc_type="OCS_PNOT")
+    paperlist = ''
+    if project_county == 'Baldwin':
+        paperlist = 'The Islander\nLagniappe'
+    else:
+        paperlist = 'Lagniappe'
+    body = "For Publication.\n" + paperlist +"\nThank you, Kelly!"
+    send_email('COASTAL PROGRAM • PNOT • '+acamp,'KBozeman@adem.alabama.gov',body)
 
 def set_pnottype(document_type):
     global pnottype
@@ -381,7 +447,7 @@ def open_pnot_window():
     # PNOT Choice Window
     pnot = ttk.Toplevel()
     pnot.title("ADEM Coastal Document Genie")
-    pnot.iconbitmap("free.ico")
+    pnot.iconbitmap(icon)
     chosen_type = list(document_types.keys())[2]
     subtypes = document_types[chosen_type]
     greeting = ttk.Label(pnot, text="What type of Public Notice do you want to generate?")
@@ -407,8 +473,8 @@ def open_perminput_window():
     global timein, timeout, complaint
     global phone, comments, photos, participants
     perm1 = ttk.Toplevel()
+    perm1.iconbitmap(icon)
     perm1.title("ADEM Coastal Document Genie")
-    perm.iconbitmap("free.ico")
     perm1.bind('<Return>', lambda event: get_perm_values(acamp.get(), sam.get(), honorific.get(), first_name.get(), last_name.get(), project_address.get(), title.get(), agent_name.get(), agent_address.get(), city.get(), state.get(), zip.get(), project_name.get(), project_city.get(), project_county.get(), parcel_id.get(), prefile_date.get(), notice_type.get(), jpn_date.get(), pnot_date.get(), project_description.get(1.0, ttk.END), fee_amount.get(), fee_received.get(), adem_employee.get(), adem_email.get(),exp_date.get(), exp_date1.get(), npdes_date.get(), npdes_num.get(), parcel_size.get(), var_code.get()))
 
     left_frame = ttk.Frame(perm1, )
@@ -710,10 +776,17 @@ def perm_401(acamp, sam, honorific, first_name, last_name, project_address, titl
         countynum = ' xxx'
 
     insert_data(acamp, context)
-
+    body = f"""\
+    ACAMP: {acamp}
+    SAM: {sam}
+    Facility Name: {project_name}
+    Summary: {project_description}"""
+    send_email('For Review: ' + acamp,'CMcNeill@adem.alabama.gov',body)
     # Render automated report
     render_document(template, context, acamp, sam, county=project_county ,perm_type="401WQ", doc_type="401WQ")
     render_document(template2, context, acamp, sam, county=project_county ,perm_type="401WQ", doc_type="RATIONALE")
+    
+    
 
 def perm_LOP(acamp, sam, honorific, first_name, last_name, project_address, title, agent_name, agent_address, city, state, zip, project_name, project_city, project_county, parcel_id, prefile_date, notice_type, jpn_date, pnot_date, project_description, fee_amount, fee_received, adem_employee, adem_email):
     # Import template document
@@ -760,9 +833,16 @@ def perm_LOP(acamp, sam, honorific, first_name, last_name, project_address, titl
     insert_data(acamp, context)
     # Render automated report
     # Render automated report
+    body = f"""\
+    ACAMP: {acamp}
+    SAM: {sam}
+    Facility Name: {project_name}
+    Summary: {project_description}"""
+    send_email('For Review: ' + acamp,'CMcNeill@adem.alabama.gov',body)
     render_document(templatePerm2, context, acamp, sam, county=project_county ,perm_type="CZCERT", doc_type="CZM")
     render_document(templatePerm1, context, acamp, sam, county=project_county ,perm_type="CZCERT", doc_type="401WQ")
     render_document(templateRat,context,acamp,sam,project_county,"CZCERT","RATIONALE")
+    
 
 def perm_VAR(acamp, sam, honorific, first_name, last_name, project_address, title, agent_name, agent_address, city, state, zip, project_name, project_city, project_county, parcel_id, prefile_date, notice_type, jpn_date, pnot_date, project_description, fee_amount, fee_received, adem_employee, adem_email,var_code):
     # Import template document
@@ -810,9 +890,16 @@ def perm_VAR(acamp, sam, honorific, first_name, last_name, project_address, titl
 
     insert_data(acamp, context)
     # Render automated report
+    body = f"""\
+    ACAMP: {acamp}
+    SAM: {sam}
+    Facility Name: {project_name}
+    Summary: {project_description}"""
+    send_email('For Review (VARIANCE): ' + acamp,'CMcNeill@adem.alabama.gov',body)
     render_document(templatePerm2, context, acamp, sam, county=project_county ,perm_type="CZCERT", doc_type="CZM")
     render_document(templatePerm1, context, acamp, sam, county=project_county ,perm_type="CZCERT", doc_type="401WQ")
     render_document(templateRat,context,acamp,sam,project_county,"CZCERT","RATIONALE")
+
 
 
 def perm_NRU(acamp, sam, honorific, first_name, last_name, project_address, title, agent_name, agent_address, city, state, zip, project_name, project_city, project_county, parcel_id, prefile_date, notice_type, jpn_date, pnot_date, project_description, fee_amount, fee_received, adem_employee, adem_email,npdes_date,npdes_num):
@@ -856,6 +943,12 @@ def perm_NRU(acamp, sam, honorific, first_name, last_name, project_address, titl
     }
     insert_data(acamp, context)
     # Render automated report
+    body = f"""\
+    ACAMP: {acamp}
+    SAM: {sam}
+    Facility Name: {project_name}
+    Summary: {project_description}"""
+    send_email('For Review: ' + acamp,'CMcNeill@adem.alabama.gov',body)
     render_document(templaten, context, acamp, sam, county=project_county ,perm_type="CZCERT", doc_type="NRU")
     render_document(templatec, context, acamp, sam, county=project_county ,perm_type="CZCERT", doc_type="CZM")
     render_document(template2,context,acamp,sam,project_county,"CZCERT","RATIONALE")
@@ -904,6 +997,12 @@ def perm_TIMEEXT(acamp, sam, honorific, first_name, last_name, project_address, 
         'New_Expiration': exp_date1
     }
     insert_data(acamp, context)
+    body = f"""\
+    ACAMP: {acamp}
+    SAM: {sam}
+    Facility Name: {project_name}
+    Summary: {project_description}"""
+    send_email('For Review: ' + acamp,'CMcNeill@adem.alabama.gov',body)
     # Render automated report
     render_document(template,context,acamp,sam,project_county,"","Time Extension")
 
@@ -942,6 +1041,11 @@ def perm_NOREQ(acamp, sam, honorific, first_name, last_name, project_address, ti
     }
     insert_data(acamp, context)
     # Render automated report
+    body = f"""\
+    ACAMP: {acamp}
+    SAM: {sam}
+    Facility Name: {project_name}"""
+    send_email('For Review: ' + acamp,'CMcNeill@adem.alabama.gov',body)
     render_document(template,context,acamp,sam,project_county,"","No Permit Required")
 
 def set_permtype(document_type):
@@ -959,7 +1063,7 @@ def open_perm_window():
     # perm Choice Window
     perm = ttk.Toplevel()
     perm.title("ADEM Coastal Document Genie")
-    perm.iconbitmap("free.ico")
+    perm.iconbitmap(icon)
     chosen_type = list(document_types.keys())[3]
     subtypes = document_types[chosen_type]
     greeting = ttk.Label(perm, text="What type of Permit do you want to generate?")
@@ -1022,7 +1126,7 @@ def open_inspr_window():
     global inspr
     inspr = ttk.Toplevel()
     inspr.title("ADEM Coastal Document Genie")
-    inspr.iconbitmap("free.ico")
+    inspr.iconbitmap(icon)
     inspr.bind('<Return>', lambda event: get_inspr_values())
     greeting = ttk.Label(inspr, text="Please provide the following information:")
     greeting.pack(padx=text_padding, pady=text_padding)
@@ -1197,7 +1301,7 @@ def open_inspr_window():
 def get_feel_values():
     #Import template document
     template = DocxTemplate('templates/FEEL_Temp.docx')
-
+    Agent_Email = agent_email.get()
     context = {
         
         'Applicant_Honorific': honorific.get(),
@@ -1222,7 +1326,14 @@ def get_feel_values():
 
     insert_data(acamp.get(), context)
     #Render automated report
+    body = f"""\
+    ACAMP: {acamp.get()}
+    SAM: {sam.get()}
+    Facility Name: {project_name.get()}"""
+
+    send_email('ADEM Fee Letter: ' + acamp.get(),Agent_Email,body)
     render_document(template,context,context.get('ACAMP_Number'),context.get('SAM_Number'),"","","FEEL")
+    
 
     feel.destroy()
 
@@ -1230,7 +1341,7 @@ def get_feel_values():
 def open_feel_window():
     global feel    
     global honorific, first_name, last_name, title, project_address
-    global agent_name, agent_address
+    global agent_name, agent_address, agent_email
     global city, state, zip
     global project_name, project_city, project_county
     global fee_amount, projcoords
@@ -1242,7 +1353,7 @@ def open_feel_window():
     # Fee Letter Window
     feel = ttk.Toplevel()
     feel.title("ADEM Coastal Document Genie")
-    feel.iconbitmap("free.ico")
+    feel.iconbitmap(icon)
     feel.bind('<Return>', lambda event: get_feel_values())
     
     left_frame = ttk.Frame(feel, )
@@ -1314,6 +1425,12 @@ def open_feel_window():
     agent_address = ttk.Entry(left_frame)
     agent_address.bind("<Control-BackSpace>", delete_previous_word)
     agent_address.pack(padx=text_padding, pady=text_padding)
+
+    agentemail_label = ttk.Label(left_frame, text="Agent Email:")
+    agentemail_label.pack(pady=text_padding)
+    agent_email = ttk.Entry(left_frame)
+    agent_email.bind("<Control-BackSpace>", delete_previous_word)
+    agent_email.pack(padx=text_padding, pady=text_padding)
 
     city_label = ttk.Label(left_frame, text="City:")
     city_label.pack(pady=text_padding)
@@ -1535,8 +1652,17 @@ def show_data():
 
     def replace_field(widget,text):
         if text != None:
-            widget.delete(tk.INSERT,tk.END)
-            widget.insert(tk.INSERT,text)
+            if isinstance(widget, ttk.Entry):
+                widget.delete(0,tk.END)
+                widget.insert(0,text)
+            else:
+                widget.delete(1.0,tk.END)
+                widget.insert(1.0,text)
+        else:
+            if isinstance(widget, ttk.Entry):
+                widget.insert(0,"")
+            else:
+                widget.insert(1.0,"")
     
 
     def onDoubleClick(event):
@@ -1817,7 +1943,7 @@ for i, document_type in enumerate(document_types.keys()):
 def open_options_window():
     options = ttk.Toplevel()
     options.title("ADEM Coastal Document Genie")
-    options.iconbitmap("free.ico")
+    options.iconbitmap(icon)
     greeting = ttk.Label(options, text="Please Choose an Option Below:").pack(padx=text_padding, pady=text_padding)
     database_button = ttk.Button(options, text = 'View Database', command = show_data)
     database_button.pack(padx=text_padding, pady=text_padding)
