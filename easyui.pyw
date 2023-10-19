@@ -52,14 +52,6 @@ document_types = {
 icon = r'.\free.ico'
 
 
-#list of active permitters
-permitters = {
-    0:["Choose",''],
-    1:["Mark Rainey","mark.rainey"],
-    2:["Katie Smith", "katiem.smith"],
-    3:["Sarila Mickle", "sarila.mickle"],
-    4:["Autumn Nitz", "autumn.nitz"]
-}
 
 var_codes = {
     0:["Choose",""],
@@ -106,38 +98,6 @@ def toggle_dark_mode():
 
 def open_file(filename):
     subprocess.Popen(["start",'', filename], shell=True)
-
-def display_pdf(pdf_path):
-    # Convert PDF to images
-    images = convert_from_path(pdf_path, 500, poppler_path=r'.\poppler-0.68.0\bin')
-    
-    # Select the first image from the list
-    image = images[0]
-
-    # Create a Tkinter window
-    feesheet = ttk.Toplevel()
-    feesheet.title("Fee Sheet")
-    feesheet.geometry('800x850')
-    feesheet.iconbitmap(icon)
-
-    # Create a Canvas widget to display the PDF pages
-    canvas = ttk.Canvas(feesheet, bg="white")
-    canvas.pack(fill=ttk.BOTH, expand=True)
-
-    
-
-    # Define the desired display size
-    desired_width = 800  # Adjust the width as needed
-    desired_height = 950  # Adjust the height as needed
-    feesheet.config(width=desired_width, height=desired_height)
-
-    # Resize the image to fit the desired display size
-    image = image.resize((desired_width, desired_height))
-
-    # Display the PDF pages as images on the Canvas widget
-    img = ImageTk.PhotoImage(image)
-    canvas.img = img  # Store the reference to the image object
-    canvas.create_image(0, 0, anchor=ttk.NW, image=img)
 
 def delete_previous_word(event):
     widget = event.widget
@@ -661,6 +621,7 @@ def open_perminput_window():
     title.bind("<Control-BackSpace>", delete_previous_word)
     title.pack(padx=text_padding, pady=text_padding)
 
+    agents = get_agents()
     agent_list = []
     for i in agents:
         agent_list.append(i[0])
@@ -1573,43 +1534,31 @@ def open_inspr_window():
     participants.bind("<Control-BackSpace>", delete_previous_word)
     participants.pack(padx=text_padding, pady=text_padding)
 
-    permitter_list = []
-    for i in permitters:
-        permitter_list.append(permitters.get(i)[0])
-    
-    # Create Label
     label1 = ttk.Label(right_frame , text = "Choose ADEM Permitter: " )
     label1.pack(padx=text_padding, pady=text_padding)  
-
-    clicked = ttk.StringVar()
-
-    clicked.set( "Choose ADEM Permitter:" )
-
-    drop = ttk.OptionMenu( right_frame, clicked, *permitter_list)
-    drop.pack(padx=text_padding, pady=text_padding)
-
-    def callback(*args):
-        for i in permitters:
-            if clicked.get() == permitters.get(i)[0]:
-                adem_email.delete(0,ttk.END)
-                adem_employee.delete(0,ttk.END)
-                adem_employee.insert(0, permitters[i][0])
-                adem_email.insert(0, permitters[i][1])
-        
-
-    clicked.trace("w", callback)
-
+    get_data3()
     yourname_label = ttk.Label(right_frame, text="Your Name:")
-    yourname_label.pack(padx=text_padding, pady=text_padding)
-    adem_employee = ttk.Entry(right_frame)
+    yourname_label.pack(pady=text_padding)
+    adem_employee = ttk.Entry(right_frame, textvariable= name_var)
     adem_employee.bind("<Control-BackSpace>", delete_previous_word)
     adem_employee.pack(padx=text_padding, pady=text_padding)
 
     youremail_label = ttk.Label(right_frame, text="Your Email:")
-    youremail_label.pack(padx=text_padding, pady=text_padding)
-    adem_email = ttk.Entry(right_frame)
+    youremail_label.pack(pady=text_padding)    
+    adem_email = ttk.Entry(right_frame, textvariable= email_var)
     adem_email.bind("<Control-BackSpace>", delete_previous_word)
     adem_email.pack(padx=text_padding, pady=text_padding)
+
+    adem_pronoun = ""
+
+    def get_pronoun():
+        conn = sqlite3.connect(database)
+        c = conn.cursor()
+        c.execute("SELECT Pronoun FROM settings WHERE Name = ?", (adem_employee.get(),))
+        data = c.fetchall()
+        adem_pronoun = data[0][0]
+        print(adem_pronoun)
+        get_inspr_values()
 
 
     comments_label = ttk.Label(inspr, text="Comments/Site Observations:")
@@ -1620,9 +1569,8 @@ def open_inspr_window():
 
     
     # Button to retrieve input values
-    submit_button = ttk.Button(inspr, text="Submit", command=get_inspr_values)
-    submit_button.pack(padx=text_padding, pady=text_padding)
-
+    submit_button = ttk.Button(right_frame, text="Submit", command=get_pronoun)
+    submit_button.pack(padx=text_padding, pady=text_padding,side=ttk.LEFT)
 # END INSPECTION REPORT
 
 #BEGIN FEE SHEET
@@ -1752,7 +1700,7 @@ def open_feel_window():
     title = ttk.Entry(left_frame)
     title.bind("<Control-BackSpace>", delete_previous_word)
     title.pack(padx=text_padding, pady=text_padding)
-
+    agents = get_agents()
     agent_list = []
     for i in agents:
         agent_list.append(i[0])
@@ -2209,6 +2157,7 @@ def insert_agent_data(agent_name, data):
     # Commit the changes and close the connection
     conn.commit()
     conn.close()
+    
 
 def show_data():
     data = ttk.Toplevel()
@@ -2653,6 +2602,7 @@ def get_agents():
     finally:
         conn.close()
 
+global agents 
 agents = get_agents()
 def open_first():
     first = ttk.Toplevel()
