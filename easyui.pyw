@@ -19,7 +19,10 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as ec
+from selenium.webdriver.common.action_chains import ActionChains
 import time
+import re
+from urllib.parse import quote_plus
 
 # Main Configuration
 
@@ -172,7 +175,7 @@ def send_email(subject_data, to_data, body_data):
         pass
 
 def find_zip(address, city):
-    zip_API = r"API_KEY"
+    zip_API = r"XWCGJUCYNPDBDK4EI7FD"
     params = {
         'address': address,
         'city': city,
@@ -189,40 +192,136 @@ def find_zip(address, city):
         zip = ''
     return zip
 
-def findPID(address, city, county):
-    driver = webdriver.Firefox()
+def findPID(address, city, county, widget):
+    global x_coordinate 
+    global y_coordinate 
     if(county.lower() == "mobile"):
-        # Navigate to the website
-        driver.get(r"https://cityofmobile.maps.arcgis.com/apps/webappviewer/index.html?id=44b3d1ecf57d4daa919a1e40ecca0c02")
-        time.sleep(2)
-        # Find form elements and fill them in
-        search_box = driver.find_element(By.XPATH, '//*[@id="esri_dijit_Search_0_input"]')  # Search Box
+        # Define the base URL and the parameters
+        base_url = "https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates"
+        params = {
+            "SingleLine": " 850 Wesley Ave",
+            "f": "json",
+            "outSR": '{"wkid":102630}',
+            "outFields": "Addr_type,Match_addr,StAddr,City",
+            "distance": 50000,
+            "location": '{"x":1780226.1730222248,"y":249170.55814922124,"spatialReference":{"wkid":102630}}',
+            "maxLocations": 6
+        }
+        global x_coordinate 
+        global y_coordinate 
+        # Perform the GET request
+        response = requests.get(base_url, params=params)
 
-        search_box.send_keys(address)
+        # Check for a successful response
+        if response.status_code == 200:
+            json_data = response.json()
+            # Access the first candidate's location
+            first_candidate_location = json_data['candidates'][0]['location']
+            first_candidate_extent = json_data['candidates'][0]['extent']
+            # Extract 'x' and 'y' coordinates
+            x_coordinate = first_candidate_location['x']
+            y_coordinate = first_candidate_location['y']
 
-        # Submit the form
-        search_button = driver.find_element(By.XPATH, "/html/body/div[2]/div[2]/div[1]/div[7]/div[1]/div/div/div[2]")  # Replace 'login_button_id' with the actual ID of the login button
-        search_button.click()
+            
+            x_min = first_candidate_extent['xmin']
+            x_max = first_candidate_extent['xmax']
+            y_min = first_candidate_extent['ymin']
+            y_max = first_candidate_extent['ymax']
+        else:
+            print(f"Failed to fetch data. Status code: {response.status_code}")
+
+        # Define the base URL and the parameters
+        base_url1 = "https://maps.cityofmobile.org/arcgis/rest/services/Parcel_Details_MS/MapServer/0/query"
+        params1 = {
+            "f": "json",
+            "tolerance": 5,
+            "returnGeometry": "true",
+            'spatialRel': 'esriSpatialRelIntersects',
+            "imageDisplay": "946,629,96",
+            "geometry": f'{{"x": {x_coordinate}, "y": {y_coordinate}}}',
+            "geometryType": "esriGeometryPoint",
+            "sr": 102630,
+            "mapExtent": f"{x_min},{y_min},{x_max},{y_max}",
+            "layers": "visible:31",
+            "outFields" : 'PARCEL',
+        }
+
+
+
+
+        # Perform the GET request
+        response1 = requests.get(base_url1, params=params1)
+
+        # Check for a successful response
+        if response1.status_code == 200:
+            json_data1 = response1.json()
+            parcel_id = json_data1['features'][0]['attributes']['PARCEL']
+            print(f"Parcel ID: {parcel_id}")
+            widget.delete(0,ttk.END)
+            widget.insert(0, parcel_id)
+        else:
+            print("Parcel ID not found")
     else:
-        # Navigate to the website
-        driver.get(r"https://isv.kcsgis.com/al.baldwin_revenue/")
+        # Define the base URL and the parameters
+        base_url = "https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates"
+        params = {
+            "SingleLine": address,
+            "f": "json",
+            "outSR": '{"wkid":3857}',
+            "outFields": "Addr_type,Match_addr,StAddr,City",
+            "distance": 50000,
+            "location": '{"x":-9784628.506710067,"y":3579833.3514248817,"spatialReference":{"wkid":3857}}',
+            "maxLocations": 6
+        }
 
-        accept_button = driver.find_element(By.XPATH, '/html/body/div[6]/div[2]/div[2]/button')
-        accept_button.click()
-        
-        time.sleep(2)
+        # Perform the GET request
+        response = requests.get(base_url, params=params)
 
-        map_button = WebDriverWait(driver, 10).until(ec.element_to_be_clickable((By.XPATH, '/html/body/div[2]/aside/button')))
-        map_button.click()
+        # Check for a successful response
+        if response.status_code == 200:
+            json_data = response.json()
+            # Access the first candidate's location
+            first_candidate_location = json_data['candidates'][0]['location']
+            first_candidate_extent = json_data['candidates'][0]['extent']
+            # Extract 'x' and 'y' coordinates
+            x_coordinate = first_candidate_location['x']
+            y_coordinate = first_candidate_location['y']
+            x_min = first_candidate_extent['xmin']
+            x_max = first_candidate_extent['xmax']
+            y_min = first_candidate_extent['ymin']
+            y_max = first_candidate_extent['ymax']
+        else:
+            print(f"Failed to fetch data. Status code: {response.status_code}")
 
-        # Find form elements and fill them in
-        search_box = driver.find_element(By.XPATH, '//*[@id="esri_dijit_Search_1_input"]')  # Search Box
-        key = address + ", " + city +", Alabama"
-        search_box.send_keys(key)
+        # Define the base URL and the parameters
+        base_url1 = "https://web2.kcsgis.com/kcsgis/rest/services/Baldwin/Public/MapServer/identify"
+        params1 = {
+            "f": "json",
+            "tolerance": 5,
+            "returnGeometry": "true",
+            "returnFieldName": "false",
+            "returnUnformattedValues": "false",
+            "imageDisplay": "946,629,96",
+            "geometry": f'{{"x": {x_coordinate}, "y": {y_coordinate}}}',
+            "geometryType": "esriGeometryPoint",
+            "sr": 3857,
+            "mapExtent": f"{x_min},{y_min},{x_max},{y_max}",
+            "layers": "visible:31"
+        }
 
-        # Submit the form
-        search_button = driver.find_element(By.XPATH, "/html/body/div[1]/div[3]/div/div/div/div[2]/div/div/div[2]")  # Replace 'login_button_id' with the actual ID of the login button
-        search_button.click()
+
+        # Perform the GET request
+        response1 = requests.get(base_url1, params=params1)
+
+        # Check for a successful response
+        if response1.status_code == 200:
+            json_data1 = response1.json()
+            pid_value = json_data1['results'][0]['attributes']['PID']
+
+            widget.delete(0,ttk.END)
+            widget.insert(0, pid_value)
+        else:
+            print(f"Failed to fetch data. Status code: {response1.status_code}")
 
 def openFolder():
     print(output_path)
@@ -348,7 +447,7 @@ def open_pnotinput_window():
     if pnottype == "VAR":        
         parcelid_label.pack(padx=text_padding, pady=text_padding)
         parcel_id.pack(padx=text_padding, pady=text_padding)
-        find_pid_button = ttk.Button(left_frame,text='Find PID',command= lambda:findPID(project_address.get(),project_city.get(),project_county.get()))
+        find_pid_button = ttk.Button(left_frame,text='Find PID',command= lambda:findPID(project_address.get(),project_city.get(),project_county.get(),parcel_id))
         find_pid_button.pack()
         
         variancecodes_label.pack(padx=text_padding, pady=text_padding)
@@ -715,7 +814,7 @@ def open_perminput_window():
     parcel_id.bind("<Control-BackSpace>", delete_previous_word)
     parcel_id.pack(padx=text_padding, pady=text_padding)
 
-    find_pid_button = ttk.Button(middle_frame,text='Find PID',command= lambda:findPID(project_address.get(),project_city.get(),project_county.get()))
+    find_pid_button = ttk.Button(middle_frame,text='Find PID',command= lambda:findPID(project_address.get(),project_city.get(),project_county.get(),parcel_id))
     find_pid_button.pack()
 
     prefile_date_label = ttk.Label(middle_frame, text="Prefile Date:")
@@ -874,7 +973,6 @@ def get_perm_values(acamp, sam, honorific, first_name, last_name, project_addres
     perm.destroy()
     perm1.destroy()
 
-
 def perm_401(acamp, sam, honorific, first_name, last_name, project_address, title, agent_name, agent_address, city, state, zip, project_name, project_city, project_county, parcel_id, prefile_date, notice_type, jpn_date, pnot_date, project_description, fee_amount, fee_received, adem_employee, adem_email):
 # Import template document
     template = DocxTemplate(r'.\templates\401WQC_Temp.docx')
@@ -932,7 +1030,7 @@ def perm_401(acamp, sam, honorific, first_name, last_name, project_address, titl
     SAM: {sam}
     Facility Name: {project_name}
     Summary: {project_description}"""
-
+    
     masteridBody = f""" Hi Spring, 
 
 I need a master ID for the application below. Please let me know if you have any questions or concerns! 
