@@ -175,7 +175,7 @@ def send_email(subject_data, to_data, body_data):
         pass
 
 def find_zip(address, city):
-    zip_API = r"XWCGJUCYNPDBDK4EI7FD"
+    zip_API = r"API"
     params = {
         'address': address,
         'city': city,
