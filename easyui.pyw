@@ -6,6 +6,7 @@ import datetime
 import subprocess
 import sqlite3
 import os
+from dotenv import load_dotenv
 from docx.shared import Cm
 from docx.shared import Inches
 from docxtpl import DocxTemplate, InlineImage
@@ -13,13 +14,14 @@ from docx import Document
 from PIL import ImageTk, Image
 from pdf2image import convert_from_path
 import win32com.client
-import requests
+import requests, json
 import urllib
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.common.action_chains import ActionChains
+import pyautogui
 import time
 import re
 from urllib.parse import quote_plus
@@ -27,7 +29,16 @@ from urllib.parse import quote_plus
 # Main Configuration
 
 database = r'.\database.db'
-
+icon = r'.\free.ico'
+text_padding = 5
+main = ttk.Window(themename='yeti')
+main.iconbitmap(icon)
+main.title("ADEM Coastal Document Genie")
+windowcolor = tk.StringVar()
+windowcolor.set('yeti')
+style = ttk.Style()
+countynum = ""
+output_path = ""
 
 #This is a list of all of the types of documents one may wish to generate.
 document_types = {
@@ -40,7 +51,8 @@ document_types = {
         "NRU": None,
         "BSSE": None,
         "FAA": None,
-        "OCS": None
+        "OCS": None,
+        "GWE": None
     },
     "Permit": {
         "IP": None,
@@ -48,14 +60,15 @@ document_types = {
         "VAR": None,
         "NRU": None,
         "401": None,
+        "FAA": None,
+        "GWE - New": None,
+        "GWE - Renewal": None,
         "Time Extension": None,
         "No Permit Required": None
     }
 }
-icon = r'.\free.ico'
 
-
-
+#List of all Variance Codes
 var_codes = {
     0:["Choose",""],
     1:["Dredging/Filling","335-8-2-.02"],
@@ -71,15 +84,6 @@ var_codes = {
     11:["Discharge to Coastal Waters","335-8-2-.12"]
 }
 
-text_padding = 5
-main = ttk.Window(themename='yeti')
-main.iconbitmap(icon)
-main.title("ADEM Coastal Document Genie")
-windowcolor = tk.StringVar()
-windowcolor.set('yeti')
-style = ttk.Style()
-countynum = ""
-output_path = ""
 
 #UTILITY FUNCTIONS
 def toggle_dark_mode():
@@ -97,7 +101,6 @@ def toggle_dark_mode():
         c.execute(sql)
     conn.commit()
     conn.close()
-
 
 def open_file(filename):
     subprocess.Popen(["start",'', filename], shell=True)
@@ -143,7 +146,7 @@ def render_document(template, context, acamp, sam="", county="",perm_type="", do
     if county.lower() == 'mobile':
         countynum = ' 097'
     elif county.lower() == 'baldwin':
-        countynum = ' 002'
+        countynum = ' 003'
     else:
         countynum = ' xxx'
     date = datetime.date.today()
@@ -174,20 +177,35 @@ def send_email(subject_data, to_data, body_data):
     except Exception as e:
         pass
 
+load_dotenv()
+
 def find_zip(address, city):
-    zip_API = r"API"
+    zip_API = os.getenv("ZIP_API_KEY")
     params = {
         'address': address,
         'city': city,
         'state': 'AL',
-        'key' : zip_API
+        'key': zip_API
     }
+
     encoded_params = urllib.parse.urlencode(params)
+
     url = f'https://api.zip-codes.com/ZipCodesAPI.svc/1.0/ZipCodeOfAddress?{encoded_params}'
+
     response = requests.get(url)
+
+    print(response.json())
+
     if response.status_code == 200:
-        data = response.json()
-        zip = data["Result"]["Address"]["Zip5"]
+        try:
+            data = response.json()
+            zip = data["Result"]["Address"]["Zip5"]
+        except KeyError:
+            error = data["Error"]
+            if (error == 'USPS service request error. Response: Address Not Found.'):
+                zip = 'Not found.'
+            else:
+                zip = 'Error'
     else:
         zip = ''
     return zip
@@ -197,75 +215,46 @@ def findPID(address, city, county, widget):
     global y_coordinate 
     if(county.lower() == "mobile"):
         # Define the base URL and the parameters
-        base_url = "https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates"
-        params = {
-            "SingleLine": " 850 Wesley Ave",
-            "f": "json",
-            "outSR": '{"wkid":102630}',
-            "outFields": "Addr_type,Match_addr,StAddr,City",
-            "distance": 50000,
-            "location": '{"x":1780226.1730222248,"y":249170.55814922124,"spatialReference":{"wkid":102630}}',
-            "maxLocations": 6
-        }
-        global x_coordinate 
-        global y_coordinate 
-        # Perform the GET request
-        response = requests.get(base_url, params=params)
+        base_url = "https://cityofmobile.maps.arcgis.com/apps/webappviewer/index.html?id=44b3d1ecf57d4daa919a1e40ecca0c02"
+        driver = webdriver.Firefox()
+        driver.get(base_url)
+        time.sleep(1)
 
-        # Check for a successful response
-        if response.status_code == 200:
-            json_data = response.json()
-            # Access the first candidate's location
-            first_candidate_location = json_data['candidates'][0]['location']
-            first_candidate_extent = json_data['candidates'][0]['extent']
-            # Extract 'x' and 'y' coordinates
-            x_coordinate = first_candidate_location['x']
-            y_coordinate = first_candidate_location['y']
+        address_box = driver.find_element(By.ID, 'esri_dijit_Search_0_input')
+        address_box.clear()
+        address_box.send_keys(f"{address} {city}")
+        pyautogui.press('enter')
 
-            
-            x_min = first_candidate_extent['xmin']
-            x_max = first_candidate_extent['xmax']
-            y_min = first_candidate_extent['ymin']
-            y_max = first_candidate_extent['ymax']
-        else:
-            print(f"Failed to fetch data. Status code: {response.status_code}")
+    
+        main_panel = WebDriverWait(driver, 10).until(
+            ec.presence_of_element_located((By.CLASS_NAME, 'mainSection'))
+        )
 
-        # Define the base URL and the parameters
-        base_url1 = "https://maps.cityofmobile.org/arcgis/rest/services/Parcel_Details_MS/MapServer/0/query"
-        params1 = {
-            "f": "json",
-            "tolerance": 5,
-            "returnGeometry": "true",
-            'spatialRel': 'esriSpatialRelIntersects',
-            "imageDisplay": "946,629,96",
-            "geometry": f'{{"x": {x_coordinate}, "y": {y_coordinate}}}',
-            "geometryType": "esriGeometryPoint",
-            "sr": 102630,
-            "mapExtent": f"{x_min},{y_min},{x_max},{y_max}",
-            "layers": "visible:31",
-            "outFields" : 'PARCEL',
-        }
+        time.sleep(2)
+        page_source = driver.page_source
 
+        # Define a regex pattern to match the Parcel ID
+        # This assumes the format 'Parcel ID:' followed by the actual ID (e.g., R022808282800061.001)
+        parcel_id_pattern = r'R\d{15}\.\d{3}'
 
+        # Search for the pattern in the page source
+        match = re.search(parcel_id_pattern, page_source)
 
-
-        # Perform the GET request
-        response1 = requests.get(base_url1, params=params1)
-
-        # Check for a successful response
-        if response1.status_code == 200:
-            json_data1 = response1.json()
-            parcel_id = json_data1['features'][0]['attributes']['PARCEL']
+        if match:
+            parcel_id = match.group(0)  # Extract the first capture group (the Parcel ID)
             print(f"Parcel ID: {parcel_id}")
             widget.delete(0,ttk.END)
             widget.insert(0, parcel_id)
+            driver.quit()
         else:
-            print("Parcel ID not found")
+            print("Parcel ID not found.")
+        
+        
     else:
         # Define the base URL and the parameters
         base_url = "https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates"
         params = {
-            "SingleLine": address,
+            "SingleLine": address+' '+city,
             "f": "json",
             "outSR": '{"wkid":3857}',
             "outFields": "Addr_type,Match_addr,StAddr,City",
@@ -316,6 +305,7 @@ def findPID(address, city, county, widget):
         # Check for a successful response
         if response1.status_code == 200:
             json_data1 = response1.json()
+            print(json_data1)
             pid_value = json_data1['results'][0]['attributes']['PID']
 
             widget.delete(0,ttk.END)
@@ -324,7 +314,6 @@ def findPID(address, city, county, widget):
             print(f"Failed to fetch data. Status code: {response1.status_code}")
 
 def openFolder():
-    print(output_path)
     os.startfile(os.path.normpath(output_path))
 
 def open_file_dialog():
@@ -338,9 +327,7 @@ def open_file_dialog():
         sql = "UPDATE settings SET Output = ?"
         c.execute(sql, (folder_path,))
         conn.commit()
-        conn.close()
-
-    
+        conn.close()  
         
 
 
@@ -380,15 +367,15 @@ def open_pnotinput_window():
     acamp = ttk.Entry(left_frame)
     acamp.bind("<Control-BackSpace>", delete_previous_word)
     acamp.pack(padx=text_padding, pady=text_padding)
-
+    
+    sam_label = ttk.Label(left_frame, text="SAM Number:")
     sam = ttk.Entry(left_frame)
-    sam.bind("<Control-BackSpace>", delete_previous_word)
 
-    if pnottype != "BSSE" and pnottype != "FAA" and pnottype != "OCS" :
-        sam_label = ttk.Label(left_frame, text="SAM Number:")
-        sam_label.pack(padx=text_padding, pady=text_padding)
+    if pnottype != "BSSE" and pnottype != "FAA" and pnottype != "OCS" and pnottype != "GWE":
         
+        sam_label.pack(padx=text_padding, pady=text_padding)
         sam.pack(padx=text_padding, pady=text_padding)
+        sam.bind("<Control-BackSpace>", delete_previous_word)
 
     project_name_label = ttk.Label(left_frame, text="Project Name:")
     project_name_label.pack(padx=text_padding, pady=text_padding)
@@ -484,9 +471,11 @@ def get_pnot_values(acamp, sam="", project_name="", project_address="", project_
     elif pnottype == "BSSE":
         pnot_BSSE(acamp, project_name, project_address, project_city, project_county, project_description)
     elif pnottype == "FAA":
-        pnot_FAA(acamp, project_address, project_city, project_county, federal_agency, project_description)
+        pnot_FAA(acamp, project_name, project_address, project_city, project_county, federal_agency, project_description)
     elif pnottype == "OCS":
         pnot_OCS(acamp, project_name, project_address, project_description)
+    elif pnottype == "GWE":
+        pnot_GWE(acamp, project_name, project_address, project_city, project_county, project_description)
     
     pnot.destroy()
     pnot1.destroy()
@@ -495,9 +484,9 @@ def pnot_BSSE(acamp, project_name, project_address, project_city, project_county
     template = DocxTemplate(r'.\templates\BSEEPNOT_Temp.docx')
     context = {
         'ACAMP_Number': acamp,
-        'Project_Name': project_name,
+        'Applicant_Name': project_name,
         'Project_Location': project_address,
-        'Project_Description': project_description,
+        'Project_Description': project_description.strip(),
         'Project_City': project_city,
         'Project_County': project_county
     }
@@ -520,12 +509,12 @@ def pnot_VAR(acamp, sam, project_name, project_address, project_city, project_co
     context = {
         'ACAMP_Number': acamp,
         'SAM_Number': sam,
-        'Project_Name': project_name,
+        'Applicant_Name': project_name,
         'Project_Location': project_address,
         'Project_City': project_city,
         'Project_County': project_county,
         'Parcel_ID': parcel_id,
-        'Project_Description': project_description,
+        'Project_Description': project_description.strip(),
         'var_code': var_code,
     }
 
@@ -544,11 +533,11 @@ def pnot_NRU(acamp, sam, project_name, project_address, project_city, project_co
     context = {
         'ACAMP_Number': acamp,
         'SAM_Number': sam,
-        'Project_Name': project_name,
+        'Applicant_Name': project_name,
         'Project_Location': project_address,
         'Project_City': project_city,
         'Project_County': project_county,
-        'Project_Description': project_description,
+        'Project_Description': project_description.strip(),
     }
 
 
@@ -563,36 +552,61 @@ def pnot_NRU(acamp, sam, project_name, project_address, project_city, project_co
     body = "For Publication.\n" + paperlist +"\nThank you, Kelly!"
     send_email('COASTAL PROGRAM • PNOT • '+acamp,'KBozeman@adem.alabama.gov',body)
 
-def pnot_FAA(acamp, project_address, project_city, project_county, federal_agency, project_description):
-    template = DocxTemplate(r'.\templates\FAAPNOT_Temp.docx')
+def pnot_GWE(acamp, project_name, project_address, project_city, project_county,project_description):
+    template = DocxTemplate(r'.\templates\GWEPNOT_Temp.docx')
     context = {
         'ACAMP_Number': acamp,
-        'Federal_Agency': federal_agency,
+        'Applicant_Name': project_name,
         'Project_Location': project_address,
         'Project_City': project_city,
         'Project_County': project_county,
-        'Project_Description': project_description,
+        'Project_Description': project_description.strip(),
+    }
+
+
+    insert_data(acamp, context)
+    render_document(template, context, acamp, sam="", county=project_county ,perm_type="", doc_type="GWE_PNOT")
+    paperlist = ''
+    if project_county == 'Baldwin':
+        paperlist = 'The Islander\nLagniappe'
+    else:
+        paperlist = 'Lagniappe'
+    body = "For Publication.\n" + paperlist +"\nThank you!"
+    send_email('COASTAL PROGRAM • PNOT • '+acamp,'cmcneill@adem.alabama.gov',body)
+
+def pnot_FAA(acamp, project_name, project_address, project_city, project_county, federal_agency, project_description):
+    template = DocxTemplate(r'.\templates\FAAPNOT_Temp.docx')
+    context = {
+        'ACAMP_Number': acamp,
+        'Applicant_Name': federal_agency,
+        'Project_Name': project_name,
+        'Project_Location': project_address,
+        'Project_City': project_city,
+        'Project_County': project_county,
+        'Project_Description': project_description.strip(),
     }
     insert_data(acamp, context)
-    render_document(template, context, acamp, sam, county=project_county ,perm_type="", doc_type="FAA_PNOT")
+    render_document(template, context, acamp, sam="", county=project_county ,perm_type="", doc_type="FAA_PNOT")
     paperlist = ''
     if project_county == 'Baldwin':
         paperlist = 'The Islander\nLagniappe'
     else:
         paperlist = 'Lagniappe'
     body = "For Publication.\n" + paperlist +"\nThank you, Kelly!"
-    send_email('COASTAL PROGRAM • PNOT • '+acamp,'KBozeman@adem.alabama.gov',body)
+    send_email('COASTAL PROGRAM • PNOT • '+acamp,'CMcNeill@adem.alabama.gov',body)
 
+    body_statedef = 'Good Morning All:\n\n Attached is the ADEM public notice for the referenced ' + federal_agency +' proposed activities.\n\nThe ' + federal_agency + ' pursuant to Title 15CFR Part 930 Subpart C, the applicant has requested the ADEM’s review of the activities for consistency with the State’s coastal zone management program. The ' +federal_agency+' proposes to ' + project_description + 'Please review the attachment and let me know via return email whether or not:\n\n · John Mareska: ADCNR-MRD has any concerns or comments about the activities’ potential to negatively impact wildlife and/or fishery habitat (ADEM Admin. Code r. 335-8-2-.01[b]).\n\n· Butch Gregory: Any GSA-AOGB concerns or comments about the proposed activities (ADEM Admin. Code r.335-8-1-.09[2]).\n\n Please find attached the ' +federal_agency+' submittance. If you require any other specific information, please let me know and I will do my best to respond in a timely manner.\n\n Call or email any time with questions. \\nn Respectfully,\n\n Mark Rainey \nEnvironmental Scientist, Sr\nCoastal Area Management Program\nAlabama Department of Environmental Management\n1615 South Broad Street | Mobile, Alabama 36605\n(251)206-5283'
+    send_email('COASTAL PROGRAM • Agency Comment Request • ACAMP-'+acamp+' | '+federal_agency + ' | ' + project_name, 'john.mareska@dcnr.alabama.gov, bgregory@ogb.state.al.us', body_statedef)
 def pnot_LOP(acamp, sam, project_name, project_address, project_city, project_county,project_description):
     template = DocxTemplate(r'.\templates\LOPPNOT_Temp.docx')
     context = {
         'ACAMP_Number': acamp,
         'SAM_Number': sam,
-        'Project_Name': project_name,
+        'Applicant_Name': project_name,
         'Project_Location': project_address,
         'Project_City': project_city,
         'Project_County': project_county,
-        'Project_Description': project_description,
+        'Project_Description': project_description.strip(),
     }
     insert_data(acamp, context)
     render_document(template, context, acamp, sam, county=project_county ,perm_type="", doc_type="LOP_PNOT")
@@ -608,9 +622,9 @@ def pnot_OCS(acamp, project_name, project_address, project_description):
     template = DocxTemplate(r'.\templates\OCSPNOT_Temp.docx')
     context = {
         'ACAMP_Number': acamp,
-        'Project_Name': project_name,
+        'Applicant_Name': project_name,
         'Project_Location': project_address,
-        'Project_Description': project_description,
+        'Project_Description': project_description.strip(),
     }
     insert_data(acamp, context)
     render_document(template, context, acamp, sam, county=project_county ,perm_type="", doc_type="OCS_PNOT")
@@ -663,11 +677,13 @@ def open_perminput_window():
     global timein, timeout, complaint, fee_received
     global phone, comments, photos, participants
     global prefile_date, notice_type, pnot_date, jpn_date
+    global ext_number_label, ext_number, gpm_label, gpm
+    global fed_label, fed
 
     perm1 = ttk.Toplevel()
     perm1.iconbitmap(icon)
     perm1.title("ADEM Coastal Document Genie")
-    perm1.bind('<Return>', lambda event: get_perm_values(acamp.get(), sam.get(), honorific.get(), first_name.get(), last_name.get(), project_address.get(), title.get(), agent_name.get(), agent_address.get(), city.get(), state.get(), zip.get(), project_name.get(), project_city.get(), project_county.get(), parcel_id.get(), prefile_date.get(), notice_type.get(), jpn_date.get(), pnot_date.get(), project_description.get(1.0, ttk.END), fee_amount.get(), fee_received.get(), adem_employee.get(), adem_email.get(),exp_date.get(), exp_date1.get(), npdes_date.get(), npdes_num.get(), parcel_size.get(), var_code.get()))
+    perm1.bind('<Return>', lambda event: get_perm_values(acamp.get(), sam.get(), honorific.get(), first_name.get(), last_name.get(), project_address.get(), title.get(), agent_name.get(), agent_address.get(), city.get(), state.get(), zip.get(), project_name.get(), project_city.get(), project_county.get(), parcel_id.get(), prefile_date.get(), notice_type.get(), jpn_date.get(), pnot_date.get(), project_description.get(1.0, ttk.END), fee_amount.get(), fee_received.get(), adem_employee.get(), adem_email.get(),exp_date.get(), exp_date1.get(), npdes_date.get(), npdes_num.get(), parcel_size.get(), var_code.get(),ext_number.get, gpm.get(), fed.get()))
 
     left_frame = ttk.Frame(perm1, )
     left_frame.pack(side=ttk.LEFT)
@@ -691,10 +707,20 @@ def open_perminput_window():
     acamp.pack(padx=text_padding, pady=text_padding)
 
     sam_label = ttk.Label(middle_frame, text="SAM Number:")
-    sam_label.pack(padx=text_padding, pady=text_padding)
     sam = ttk.Entry(middle_frame)
-    sam.bind("<Control-BackSpace>", delete_previous_word)
-    sam.pack(padx=text_padding, pady=text_padding)
+    
+    if permtype not in ["GWE - New", "GWE - Renewal", "NRU", "FAA"]:
+        sam_label.pack(padx=text_padding, pady=text_padding)
+        sam.pack(padx=text_padding, pady=text_padding)
+        sam.bind("<Control-BackSpace>", delete_previous_word)
+    
+    fed_label = ttk.Label(middle_frame, text="Federal Agency: ")
+    fed = ttk.Entry(middle_frame)
+
+    if permtype == "FAA":
+        fed_label.pack(padx=text_padding, pady=text_padding)
+        fed.bind("<Control-BackSpace>", delete_previous_word)
+        fed.pack(padx=text_padding, pady=text_padding)
 
     honorific_label = ttk.Label(left_frame, text="Honorific:")
     honorific_label.pack(padx=text_padding, pady=text_padding)
@@ -784,7 +810,11 @@ def open_perminput_window():
     get_zip = ttk.Button(left_frame, text ='Get Zip', command=lambda:zip.insert(0, find_zip(agent_address.get(), city.get())))
     get_zip.pack()
 
-    project_name_label = ttk.Label(middle_frame, text="Project Name:")
+    if permtype not in ["GWE - New", "GWE - Renewal"]:
+        project_name_label = ttk.Label(middle_frame, text="Project Name:")
+    else:
+        project_name_label = ttk.Label(middle_frame, text="Well Name(s):")
+
     project_name_label.pack(padx=text_padding, pady=text_padding)
     project_name = ttk.Entry(middle_frame)
     project_name.bind("<Control-BackSpace>", delete_previous_word)
@@ -816,24 +846,29 @@ def open_perminput_window():
 
     find_pid_button = ttk.Button(middle_frame,text='Find PID',command= lambda:findPID(project_address.get(),project_city.get(),project_county.get(),parcel_id))
     find_pid_button.pack()
-
-    prefile_date_label = ttk.Label(middle_frame, text="Prefile Date:")
+    if permtype not in ["GWE - New", "GWE - Renewal", "NRU"]:
+        prefile_date_label = ttk.Label(middle_frame, text="Prefile Date:")
+    else:
+        prefile_date_label = ttk.Label(middle_frame, text="Application Date:")
     prefile_date_label.pack(padx=text_padding, pady=text_padding)
     prefile_date = ttk.Entry(middle_frame)
     prefile_date.bind("<Control-BackSpace>", delete_previous_word)
     prefile_date.pack(padx=text_padding, pady=text_padding)
+
 
     notice_type_label = ttk.Label(middle_frame, text="Notice Type:")
     notice_type_label.pack(padx=text_padding, pady=text_padding)
     notice_type = ttk.Entry(middle_frame)
     notice_type.bind("<Control-BackSpace>", delete_previous_word)
     notice_type.pack(padx=text_padding, pady=text_padding)
-
+    
     jpn_date_label = ttk.Label(middle_frame, text="USACE JPN Date:")
-    jpn_date_label.pack(padx=text_padding, pady=text_padding)
     jpn_date = ttk.Entry(middle_frame)
-    jpn_date.bind("<Control-BackSpace>", delete_previous_word)
-    jpn_date.pack(padx=text_padding, pady=text_padding)
+    
+    if permtype not in ["GWE - New", "GWE - Renewal"]:
+        jpn_date_label.pack(padx=text_padding, pady=text_padding)
+        jpn_date.pack(padx=text_padding, pady=text_padding)
+        jpn_date.bind("<Control-BackSpace>", delete_previous_word)
 
     pnot_date_label = ttk.Label(middle_frame, text="ADEM PNOT Date:")
     pnot_date_label.pack(padx=text_padding, pady=text_padding)
@@ -847,7 +882,24 @@ def open_perminput_window():
     exp_date1_label = ttk.Label(middle_frame, text="New Expiration Date:")
     exp_date1 = ttk.Entry(middle_frame)
     exp_date1.bind("<Control-BackSpace>", delete_previous_word)
+
+    ext_number_label = ttk.Label(middle_frame, text="Extension Number:")
+    ext_number = ttk.Entry(middle_frame)
+    ext_number.bind("<Control-BackSpace>", delete_previous_word)
+    gpm_label = ttk.Label(middle_frame, text="GPM:")
+    gpm = ttk.Entry(middle_frame)
+    gpm.bind("<Control-BackSpace>", delete_previous_word)
     
+    if permtype == "GWE - New":
+        gpm_label.pack(padx=text_padding, pady=text_padding)
+        gpm.pack(padx = text_padding, pady=text_padding)
+
+    if permtype == "GWE - Renewal":
+        ext_number_label.pack(padx=text_padding, pady=text_padding)
+        ext_number.pack(padx=text_padding, pady=text_padding)
+        gpm_label.pack(padx=text_padding, pady=text_padding)
+        gpm.pack(padx = text_padding, pady=text_padding)
+
     if permtype == "Time Extension":
         
         exp_date_label.pack(padx=text_padding, pady=text_padding)
@@ -908,23 +960,28 @@ def open_perminput_window():
         prefile_date.pack(padx=text_padding, pady=text_padding)
     
     fee_amount_label = ttk.Label(right_frame, text="Fee Amount:")
-    fee_amount_label.pack(padx=text_padding, pady=text_padding)
     fee_amount = ttk.Entry(right_frame)
-    fee_amount.bind("<Control-BackSpace>", delete_previous_word)
-    fee_amount.pack(padx=text_padding, pady=text_padding)
+
+    if permtype not in ["GWE - New", "GWE - Renewal"]:
+        fee_amount_label.pack(padx=text_padding, pady=text_padding)
+        fee_amount.bind("<Control-BackSpace>", delete_previous_word)
+        fee_amount.pack(padx=text_padding, pady=text_padding)
 
     fee_received_label = ttk.Label(right_frame, text="Fee Received:")
-    fee_received_label.pack(padx=text_padding, pady=text_padding)
     fee_received = ttk.Entry(right_frame)
+    fee_received_label.pack(padx=text_padding, pady=text_padding)
     fee_received.bind("<Control-BackSpace>", delete_previous_word)
     fee_received.pack(padx=text_padding, pady=text_padding)
+
+    
+        
 
     project_description_label = ttk.Label(right_frame, text="Project Description:")
     project_description_label.pack(padx=text_padding, pady=text_padding)
     project_description = ttk.Text(right_frame)
     project_description.bind("<Control-BackSpace>", delete_previous_word2)
     project_description.pack(padx=text_padding, pady=text_padding)
-
+    
     get_data3()
 
     adem_employee_label = ttk.Label(right_frame, text="ADEM Employee:")
@@ -947,16 +1004,14 @@ def open_perminput_window():
         data = c.fetchall()
         adem_pronoun = data[0][0]
         print(adem_pronoun)
-        get_perm_values(acamp.get(), sam.get(), honorific.get(), first_name.get(), last_name.get(), project_address.get(), title.get(), agent_name.get(), agent_address.get(), city.get(), state.get(), zip.get(), project_name.get(), project_city.get(), project_county.get(), parcel_id.get(), prefile_date.get(), notice_type.get(), jpn_date.get(), pnot_date.get(), project_description.get(1.0, ttk.END), fee_amount.get(), fee_received.get(), adem_employee.get(), adem_email.get(),exp_date.get(), exp_date1.get(), npdes_date.get(), npdes_num.get(), parcel_size.get(),var_code.get())
+        get_perm_values(acamp.get(), sam.get(), honorific.get(), first_name.get(), last_name.get(), project_address.get(), title.get(), agent_name.get(), agent_address.get(), city.get(), state.get(), zip.get(), project_name.get(), project_city.get(), project_county.get(), parcel_id.get(), prefile_date.get(), notice_type.get(), jpn_date.get(), pnot_date.get(), project_description.get(1.0, ttk.END), fee_amount.get(), fee_received.get(), adem_employee.get(), adem_email.get(),exp_date.get(), exp_date1.get(), npdes_date.get(), npdes_num.get(), parcel_size.get(),var_code.get(), ext_number.get(), gpm.get(), fed.get())
 
     submit_button = ttk.Button(right_frame, text="Submit", command=lambda: get_pronoun())
     submit_button.pack(padx=text_padding, pady=text_padding)
-
-    
-
-def get_perm_values(acamp, sam, honorific, first_name, last_name, project_address, title, agent_name, agent_address, city, state, zip, project_name, project_city, project_county, parcel_id, prefile_date, notice_type, jpn_date, pnot_date, project_description, fee_amount, fee_received, adem_employee, adem_email, exp_date, exp_date1, npdes_date, npdes_num, parcel_size, var_code):
+ 
+def get_perm_values(acamp, sam, honorific, first_name, last_name, project_address, title, agent_name, agent_address, city, state, zip, project_name, project_city, project_county, parcel_id, prefile_date, notice_type, jpn_date, pnot_date, project_description, fee_amount, fee_received, adem_employee, adem_email, exp_date, exp_date1, npdes_date, npdes_num, parcel_size, var_code, ext_number, gpm, fed):
     if permtype == "IP":
-        perm_LOP(acamp, sam, honorific, first_name, last_name, project_address, title, agent_name, agent_address, city, state, zip, project_name, project_city, project_county, parcel_id, prefile_date, notice_type, jpn_date, pnot_date, project_description, fee_amount, fee_received, adem_employee, adem_email)
+        perm_IP(acamp, sam, honorific, first_name, last_name, project_address, title, agent_name, agent_address, city, state, zip, project_name, project_city, project_county, parcel_id, prefile_date, notice_type, jpn_date, pnot_date, project_description, fee_amount, fee_received, adem_employee, adem_email)
     elif permtype == "LOP":
         perm_LOP(acamp, sam, honorific, first_name, last_name, project_address, title, agent_name, agent_address, city, state, zip, project_name, project_city, project_county, parcel_id, prefile_date, notice_type, jpn_date, pnot_date, project_description, fee_amount, fee_received, adem_employee, adem_email)
     elif permtype == "VAR":
@@ -969,9 +1024,181 @@ def get_perm_values(acamp, sam, honorific, first_name, last_name, project_addres
         perm_TIMEEXT(acamp, sam, honorific, first_name, last_name, project_address, title, agent_name, agent_address, city, state, zip, project_name, project_city, project_county, parcel_id, prefile_date, notice_type, jpn_date, pnot_date, project_description, fee_amount, fee_received, adem_employee, adem_email, exp_date, exp_date1)    
     elif permtype == "No Permit Required":
         perm_NOREQ(acamp, sam, honorific, first_name, last_name, project_address, title, agent_name, agent_address, city, state, zip, project_name, project_city, project_county, adem_employee, adem_email)
-    
+    elif permtype == "GWE - Renewal":
+        perm_GWERENEWAL(acamp, honorific, first_name, last_name, project_address, title,agent_name, agent_address, city, state, zip, project_name, project_city, project_county, adem_employee, adem_email, ext_number, gpm)
+    elif permtype == "GWE - New":
+        perm_GWE(acamp, honorific, first_name, last_name, project_address, title,agent_name, agent_address, city, state, zip, project_name, project_city, project_county, adem_employee, adem_email, gpm)
+    elif permtype == "FAA":
+        perm_FAA(acamp, fed, honorific, first_name, last_name, project_address, title, agent_name, agent_address, city, state, zip, project_name, project_city, project_county, prefile_date, notice_type, pnot_date, project_description, adem_employee, adem_email)
     perm.destroy()
     perm1.destroy()
+
+def perm_FAA(acamp, fed, honorific, first_name, last_name, project_address, title, agent_name, agent_address, city, state, zip, project_name, project_city, project_county, prefile_date, notice_type, pnot_date, project_description, adem_employee, adem_email):
+    # Import template document
+    templatePerm1 = DocxTemplate('templates/FAA_Temp.docx')
+    templateRat = DocxTemplate('templates/FAARat_Temp.docx')
+    
+    # Declare template variables
+    context = {
+        
+        'Applicant_Honorific': honorific,
+        'Applicant_FirstName': first_name,
+        'Applicant_LastName': last_name,
+        'Applicant_Address': project_address,
+        'Applicant_Title': title,
+        'Agent_Name': agent_name,
+        'Agent_Address': agent_address,
+        'ACity': city,
+        'AState': state,
+        'AZip': zip,
+        'Project_Name': project_name,
+        'Project_City': project_city,
+        'Project_County': project_county,
+        'ACAMP_Number': acamp,
+        'Prefile_Date': prefile_date,
+        'Notice_Type': notice_type,
+        'PNOT_Date': pnot_date,
+        'Project_Description': project_description,
+        'ADEM_Employee': adem_employee,
+        'ADEM_Email': adem_email,
+        'Applicant_Name': fed
+    }
+
+    
+    agent = {
+        'name': agent_name,
+        'address': agent_address,
+        'city': city,
+        'state': state,
+        'email': ''
+    }
+
+    insert_agent_data(agent_name, agent)
+    insert_data(acamp, context)
+    # Render automated report
+    # Render automated report
+    body = f"""\
+    ACAMP: {acamp}
+    Facility Name: {project_name}
+    Summary: {project_description}"""
+    send_email('For Review: ' + acamp,'CMcNeill@adem.alabama.gov',body)
+    sam=""
+    render_document(templatePerm1, context, acamp, sam, county=project_county ,perm_type="CZCERT", doc_type="CZM")
+    render_document(templateRat,context,acamp,sam,project_county,"CZCERT","RATIONALE")
+
+def perm_GWERENEWAL(acamp, honorific, first_name, last_name, project_address, title,agent_name, agent_address, city, state, zip, project_name, project_city, project_county, adem_employee, adem_email, ext_number, gpm):
+    template = DocxTemplate(r'.\templates\GWERenewal_Temp.docx')
+    template2 = DocxTemplate(r'.\templates\GWERenewalRat_Temp.docx')
+
+    # Declare template variables
+    context = {
+        
+        'Applicant_Honorific': honorific,
+        'Applicant_FirstName': first_name,
+        'Applicant_LastName': last_name,
+        'Applicant_Address': project_address,
+        'Applicant_Title': title,
+        'Agent_Name': agent_name,
+        'Agent_Address': agent_address,
+        'ACity': city,
+        'AState': state,
+        'AZip': zip,
+        'Project_Name': project_name,
+        'Project_City': project_city,
+        'Project_County': project_county,
+        'Parcel_ID': parcel_id.get(),
+        'SAM_Number': sam.get(),
+        'ACAMP_Number': acamp,
+        'Extension_Number': ext_number,
+        'Prefile_Date': prefile_date.get(),
+        'Notice_Type': notice_type.get(),
+        'JPN_Date': jpn_date.get(),
+        'PNOT_Date': pnot_date.get(),
+        'Project_Description': project_description.get(1.0, ttk.END),
+        'GPM': gpm,
+        'Fee_Amount': fee_amount.get(),
+        'Fee_Received': fee_received.get(),
+        'ADEM_Employee': adem_employee,
+        'ADEM_Email': adem_email
+    }
+    agent = {
+        'name': agent_name,
+        'address': agent_address,
+        'city': city,
+        'state': state,
+        'email': ''
+    }
+
+    insert_agent_data(agent_name, agent)
+    insert_data(acamp, context)
+
+    body = f"""\
+    ACAMP: {acamp}
+    SAM: {sam.get()}
+    Facility Name: {project_name}
+    Summary: Renewal of groundwater extraction permit."""
+
+    send_email('For Review: ' + acamp,'CMcNeill@adem.alabama.gov',body)
+
+    render_document(template, context, acamp, sam.get(), county=project_county ,perm_type="GWE", doc_type="NRU")
+    render_document(template2, context, acamp, sam.get(), county=project_county,perm_type="GWE", doc_type="RATIONALE")
+
+def perm_GWE(acamp, honorific, first_name, last_name, project_address, title,agent_name, agent_address, city, state, zip, project_name, project_city, project_county, adem_employee, adem_email, gpm):
+    template = DocxTemplate(r'.\templates\GWE_Temp.docx')
+    template2 = DocxTemplate(r'.\templates\GWERat_Temp.docx')
+
+    # Declare template variables
+    context = {
+        
+        'Applicant_Honorific': honorific,
+        'Applicant_FirstName': first_name,
+        'Applicant_LastName': last_name,
+        'Applicant_Address': project_address,
+        'Applicant_Title': title,
+        'Agent_Name': agent_name,
+        'Agent_Address': agent_address,
+        'ACity': city,
+        'AState': state,
+        'AZip': zip,
+        'Project_Name': project_name,
+        'Project_City': project_city,
+        'Project_County': project_county,
+        'Parcel_ID': parcel_id.get(),
+        'SAM_Number': sam.get(),
+        'ACAMP_Number': acamp,
+        'Prefile_Date': prefile_date.get(),
+        'Notice_Type': notice_type.get(),
+        'JPN_Date': jpn_date.get(),
+        'PNOT_Date': pnot_date.get(),
+        'Project_Description': project_description.get(1.0, ttk.END),
+        'GPM': gpm,
+        'Fee_Amount': fee_amount.get(),
+        'Fee_Received': fee_received.get(),
+        'ADEM_Employee': adem_employee,
+        'ADEM_Email': adem_email
+    }
+
+    agent = {
+        'name': agent_name,
+        'address': agent_address,
+        'city': city,
+        'state': state,
+        'email': ''
+    }
+
+    insert_agent_data(agent_name, agent)
+    insert_data(acamp, context)
+
+    body = f"""\
+    ACAMP: {acamp}
+    SAM: {sam.get()}
+    Facility Name: {project_name}
+    Summary: New groundwater extraction permit. Permission to operate {project_name} in {project_city}, {project_county} with a capacity of {gpm} gallons per minute."""
+
+    send_email('For Review: ' + acamp,'CMcNeill@adem.alabama.gov',body)
+
+    render_document(template, context, acamp, sam.get(), county=project_county ,perm_type="GWE", doc_type="NRU")
+    render_document(template2, context, acamp, sam.get(), county=project_county,perm_type="GWE", doc_type="RATIONALE")
 
 def perm_401(acamp, sam, honorific, first_name, last_name, project_address, title, agent_name, agent_address, city, state, zip, project_name, project_city, project_county, parcel_id, prefile_date, notice_type, jpn_date, pnot_date, project_description, fee_amount, fee_received, adem_employee, adem_email):
 # Import template document
@@ -1005,16 +1232,9 @@ def perm_401(acamp, sam, honorific, first_name, last_name, project_address, titl
         'Fee_Amount': fee_amount,
         'Fee_Received': fee_received,
         'ADEM_Employee': adem_employee,
-        'ADEM_Email': adem_email,
-        'ADEM_Pronoun' : pronoun_var.get()
+        'ADEM_Email': adem_email
     }
-    
-    if project_county.lower() == 'mobile':
-        countynum = ' 097'
-    elif project_county.lower() == 'baldwin':
-        countynum = ' 003'
-    else:
-        countynum = ' xxx'
+
     agent = {
         'name': agent_name,
         'address': agent_address,
@@ -1057,7 +1277,85 @@ Thank you!
     render_document(template, context, acamp, sam, county=project_county ,perm_type="401WQ", doc_type="401WQ")
     render_document(template2, context, acamp, sam, county=project_county ,perm_type="401WQ", doc_type="RATIONALE")
     
+def perm_IP(acamp, sam, honorific, first_name, last_name, project_address, title, agent_name, agent_address, city, state, zip, project_name, project_city, project_county, parcel_id, prefile_date, notice_type, jpn_date, pnot_date, project_description, fee_amount, fee_received, adem_employee, adem_email):
+    # Import template document
+    templatePerm1 = DocxTemplate('templates/IPW_Temp.docx')
+    templatePerm2 = DocxTemplate('templates/IPC_Temp.docx')
+    templateRat = DocxTemplate('templates/LOPRat_Temp.docx')
     
+    # Declare template variables
+    context = {
+        
+        'Applicant_Honorific': honorific,
+        'Applicant_FirstName': first_name,
+        'Applicant_LastName': last_name,
+        'Applicant_Address': project_address,
+        'Applicant_Title': title,
+        'Agent_Name': agent_name,
+        'Agent_Address': agent_address,
+        'ACity': city,
+        'AState': state,
+        'AZip': zip,
+        'Project_Name': project_name,
+        'Project_City': project_city,
+        'Project_County': project_county,
+        'Parcel_ID': parcel_id,
+        'SAM_Number': sam,
+        'ACAMP_Number': acamp,
+        'Prefile_Date': prefile_date,
+        'Notice_Type': notice_type,
+        'JPN_Date': jpn_date,
+        'PNOT_Date': pnot_date,
+        'Project_Description': project_description,
+        'Fee_Amount': fee_amount,
+        'Fee_Received': fee_received,
+        'ADEM_Employee': adem_employee,
+        'ADEM_Email': adem_email
+    }
+
+    
+    agent = {
+        'name': agent_name,
+        'address': agent_address,
+        'city': city,
+        'state': state,
+        'email': ''
+    }
+
+    insert_agent_data(agent_name, agent)
+    insert_data(acamp, context)
+    # Render automated report
+    # Render automated report
+    body = f"""\
+    ACAMP: {acamp}
+    SAM: {sam}
+    Facility Name: {project_name}
+    Summary: {project_description}"""
+    send_email('For Review: ' + acamp,'CMcNeill@adem.alabama.gov',body)
+
+    masteridBody = f""" Hi Spring, 
+
+I need a master ID for the application below. Please let me know if you have any questions or concerns! 
+
+Permitee Name: {project_name}
+Permit Number: ACAMP-{acamp}
+Initial Application
+Date application received: {prefile_date}
+Facility Name: None – Single Family Home
+Parcel Number(s): {parcel_id}
+Facility Address: {project_address}
+Latitude/Longitude: 
+Offshore: No
+Fee Amount Paid: ${fee_amount}
+Master ID: 
+
+Thank you!
+
+"""
+    send_email('Master ID: ACAMP-' + acamp + ' // '+ project_name,'STate@adem.alabama.gov', masteridBody)
+    render_document(templatePerm2, context, acamp, sam, county=project_county ,perm_type="CZCERT", doc_type="CZM")
+    render_document(templatePerm1, context, acamp, sam, county=project_county ,perm_type="CZCERT", doc_type="401WQ")
+    render_document(templateRat,context,acamp,sam,project_county,"CZCERT","RATIONALE")
 
 def perm_LOP(acamp, sam, honorific, first_name, last_name, project_address, title, agent_name, agent_address, city, state, zip, project_name, project_city, project_county, parcel_id, prefile_date, notice_type, jpn_date, pnot_date, project_description, fee_amount, fee_received, adem_employee, adem_email):
     # Import template document
@@ -1092,16 +1390,10 @@ def perm_LOP(acamp, sam, honorific, first_name, last_name, project_address, titl
         'Fee_Amount': fee_amount,
         'Fee_Received': fee_received,
         'ADEM_Employee': adem_employee,
-        'ADEM_Email': adem_email,
-        'ADEM_Pronoun' : pronoun_var.get()
+        'ADEM_Email': adem_email
     }
 
-    if project_county.lower() == 'mobile':
-        countynum = ' 097'
-    elif project_county.lower() == 'baldwin':
-        countynum = ' 003'
-    else:
-        countynum = ' xxx'
+
     
     agent = {
         'name': agent_name,
@@ -1146,19 +1438,12 @@ Thank you!
     render_document(templatePerm1, context, acamp, sam, county=project_county ,perm_type="CZCERT", doc_type="401WQ")
     render_document(templateRat,context,acamp,sam,project_county,"CZCERT","RATIONALE")
     
-
 def perm_VAR(acamp, sam, honorific, first_name, last_name, project_address, title, agent_name, agent_address, city, state, zip, project_name, project_city, project_county, parcel_id, prefile_date, notice_type, jpn_date, pnot_date, project_description, fee_amount, fee_received, adem_employee, adem_email,var_code):
     # Import template document
     templatePerm1 = DocxTemplate('templates/LOPW_Temp.docx')
     templatePerm2 = DocxTemplate('templates/VARC_Temp.docx')
     templateRat = DocxTemplate('templates/LOPRat_Temp.docx')
     
-    if project_county.lower() == 'mobile':
-        countynum = ' 097'
-    elif project_county.lower() == 'baldwin':
-        countynum = ' 002'
-    else:
-        countynum = ' xxx'
 
     # Declare template variables
     context = {
@@ -1188,8 +1473,7 @@ def perm_VAR(acamp, sam, honorific, first_name, last_name, project_address, titl
         'Fee_Received': fee_received,
         'ADEM_Employee': adem_employee,
         'ADEM_Email': adem_email,
-        'var_code': var_code,
-        'ADEM_Pronoun' : pronoun_var.get()
+        'var_code': var_code
     }
 
     insert_data(acamp, context)
@@ -1234,8 +1518,6 @@ Thank you!
     render_document(templatePerm1, context, acamp, sam, county=project_county ,perm_type="CZCERT", doc_type="401WQ")
     render_document(templateRat,context,acamp,sam,project_county,"CZCERT","RATIONALE")
 
-
-
 def perm_NRU(acamp, sam, honorific, first_name, last_name, project_address, title, agent_name, agent_address, city, state, zip, project_name, project_city, project_county, parcel_id, prefile_date, notice_type, jpn_date, pnot_date, project_description, fee_amount, fee_received, adem_employee, adem_email,npdes_date,npdes_num):
     # Import template document
     templaten = DocxTemplate('templates/NRU_Temp.docx')
@@ -1273,8 +1555,7 @@ def perm_NRU(acamp, sam, honorific, first_name, last_name, project_address, titl
         'ADEM_Employee': adem_employee,
         'ADEM_Email': adem_email,
         'NPDES_Date': npdes_date,
-        'NPDES_Number': npdes_num,
-        'ADEM_Pronoun' : pronoun_var.get()
+        'NPDES_Number': npdes_num
     }
     insert_data(acamp, context)
 
@@ -1318,17 +1599,10 @@ Thank you!
     render_document(templatec, context, acamp, sam, county=project_county ,perm_type="CZCERT", doc_type="CZM")
     render_document(template2,context,acamp,sam,project_county,"CZCERT","RATIONALE")
 
-
 def perm_TIMEEXT(acamp, sam, honorific, first_name, last_name, project_address, title, agent_name, agent_address, city, state, zip, project_name, project_city, project_county, parcel_id, prefile_date, notice_type, jpn_date, pnot_date, project_description, fee_amount, fee_received, adem_employee, adem_email, exp_date, exp_date1):
     # Import template document
     template = DocxTemplate(r'.\templates\401EXT_Temp.docx')
     
-    if project_county.lower() == 'mobile':
-        countynum = ' 097'
-    elif project_county.lower() == 'baldwin':
-        countynum = ' 002'
-    else:
-        countynum = ' xxx'
     
     # Declare template variables
     context = {
@@ -1359,8 +1633,7 @@ def perm_TIMEEXT(acamp, sam, honorific, first_name, last_name, project_address, 
         'ADEM_Employee': adem_employee,
         'ADEM_Email': adem_email,
         'Expiration_Date': exp_date,
-        'New_Expiration': exp_date1,
-        'ADEM_Pronoun' : pronoun_var.get()
+        'New_Expiration': exp_date1
     }
     insert_data(acamp, context)
 
@@ -1387,13 +1660,7 @@ def perm_NOREQ(acamp, sam, honorific, first_name, last_name, project_address, ti
     # Import template document
     template = DocxTemplate(r'.\templates\NPR_Temp.docx')
     
-    if project_county.lower() == 'mobile':
-        countynum = ' 097'
-    elif project_county.lower() == 'baldwin':
-        countynum = ' 002'
-    else:
-        countynum = ' xxx'
-    
+   
     # Declare template variables
     context = {
         
@@ -1414,8 +1681,7 @@ def perm_NOREQ(acamp, sam, honorific, first_name, last_name, project_address, ti
         'SAM_Number': sam,
         'ACAMP_Number': acamp,
         'ADEM_Employee': adem_employee,
-        'ADEM_Email': adem_email,
-        'ADEM_Pronoun' : pronoun_var.get()
+        'ADEM_Email': adem_email
     }
     insert_data(acamp, context)
 
@@ -1582,6 +1848,7 @@ def open_inspr_window():
     complaint_label = ttk.Label(left_frame, text="Complaint #:")
     complaint_label.pack(padx=text_padding, pady=text_padding)
     complaint = ttk.Entry(left_frame)
+    complaint.bind("<Control-BackSpace>", delete_previous_word)
     complaint.pack(padx=text_padding, pady=text_padding)
 
     # Entry fields with labels in right column
@@ -1662,7 +1929,7 @@ def open_inspr_window():
     comments_label = ttk.Label(inspr, text="Comments/Site Observations:")
     comments_label.pack(padx=text_padding, pady=text_padding)
     comments = ttk.Text(inspr)
-    comments.bind("<Control-BackSpace>", delete_previous_word)
+    comments.bind("<Control-BackSpace>", delete_previous_word2)
     comments.pack(padx=text_padding, pady=text_padding)
 
     
@@ -1716,12 +1983,11 @@ def get_feel_values():
     SAM: {sam.get()}
     Facility Name: {project_name.get()}"""
 
-    send_email('ADEM Fee Letter: ' + acamp.get(),Agent_Email,body)
+    send_email('ADEM Fee Letter: ' + acamp.get(),'jsb@adem.alabama.gov',body)
     render_document(template,context,context.get('ACAMP_Number'),context.get('SAM_Number'),"","","FEEL")
     
 
     feel.destroy()
-
 
 def open_feel_window():
     global feel    
@@ -2168,7 +2434,6 @@ def create_database():
         conn.commit()
         conn.close()
 
-
 def get_data():
     conn = sqlite3.connect(database)
     c = conn.cursor()
@@ -2210,11 +2475,7 @@ def insert_data(acamp_number, data):
     # Check if a row with the matching ACAMP number exists
     c.execute("SELECT * FROM applicants WHERE ACAMP_Number=?", (acamp_number,))
     row = c.fetchone()
-    keys = list(data.keys())
-    last_key = keys[-1]  # Get the last key
 
-    del data[last_key]  # Remove the last key-value pair
-    
     if row is not None:
         # If a match is found, update the row with new data
         columns = ', '.join(f"{column}=?" for column in data.keys())
@@ -2256,28 +2517,46 @@ def insert_agent_data(agent_name, data):
     conn.commit()
     conn.close()
     
-
 def show_data():
     data = ttk.Toplevel()
-    tree = ttk.Treeview(data)    
+    data.geometry('600x400')  # Set the initial size of the window
+    data.grid_rowconfigure(1, weight=1)  # Configure the second row to expand
+    data.grid_columnconfigure(0, weight=1)  # Configure the column to expand
 
     # Define the column names
     columns = ['ACAMP #', 'SAM #', 'Project Name', 'Address', 'City', 'County']
-    
-    search_label = ttk.Label(data, text="Search")
-    search_val = ttk.StringVar()
-    search = ttk.Entry(data, textvariable=search_val)
-    search_label.pack()
-    search.pack()
 
-    # Create the columns
+    # Create a frame for the search bar
+    search_frame = ttk.Frame(data)
+    search_frame.grid(row=0, column=0, sticky='new', padx=5, pady=5)
+    search_frame.grid_columnconfigure(1, weight=1)
+
+    search_label = ttk.Label(search_frame, text="Search")
+    search_val = ttk.StringVar()
+    search_entry = ttk.Entry(search_frame, textvariable=search_val)
+
+    # Position the search label and entry within the search_frame using grid
+    search_label.grid(row=0, column=0, sticky='nw', padx=5, pady=0)
+    search_entry.grid(row=0, column=1, sticky='new', padx=5, pady=5)
+
+    # Create a frame for the tree view that includes a scrollbar
+    tree_frame = ttk.Frame(data)
+    tree_frame.grid(row=1, column=0, sticky='nsew', padx=5, pady=5)
+    tree_frame.grid_rowconfigure(0, weight=1)
+    tree_frame.grid_columnconfigure(0, weight=1)
+
+    # Create the tree view with the defined columns
+    tree = ttk.Treeview(tree_frame, columns=columns, height=20)
     tree["columns"] = columns
     for column in columns:
         tree.column(column, width=100)
         tree.heading(column, text=column)
         tree.heading(column,anchor=tk.W)
     
-    tree.column('#0', width=0)
+    tree.column('#0', width=0, stretch=tk.NO)
+    scrollbar = ttk.Scrollbar(tree_frame, orient=tk.VERTICAL, command=tree.yview)
+    tree.configure(yscroll=scrollbar)
+    
 
     def replace_field(widget,text):
         if text != None:
@@ -2542,6 +2821,7 @@ def show_data():
                     pass      
                 except Exception:
                     pass 
+                
 
     def onDel(event):
         try:
@@ -2568,12 +2848,12 @@ def show_data():
         except Exception as e:
             print("An error occurred:", e)
         
-
     def search_data(*args):
-        search_term = search_val.get()
-        conn = sqlite3.connect(database)
+        search_term = search_val.get()  # Assuming search_val is defined elsewhere and gets the search term
+        conn = sqlite3.connect(database)  # Ensure 'database' variable holds the correct database path
         c = conn.cursor()
-        c.execute("SELECT ACAMP_Number, SAM_Number, Project_Name, Project_Location, Project_City, Project_County FROM applicants WHERE ACAMP_Number LIKE ? OR SAM_Number LIKE ?", ('%'+search_term+'%', '%'+search_term+'%'))
+        # Removed the erroneous 'or' and added missing placeholders for 'Project_Location', 'Project_City', and 'Project_County'
+        c.execute("SELECT ACAMP_Number, SAM_Number, Project_Name, Project_Location, Project_City, Project_County FROM applicants WHERE ACAMP_Number LIKE ? OR SAM_Number LIKE ? OR Project_County LIKE ? OR Project_Location LIKE ? OR Project_City LIKE ?", ('%'+search_term+'%', '%'+search_term+'%', '%'+search_term+'%', '%'+search_term+'%', '%'+search_term+'%'))
         data = c.fetchall()
         conn.close()
         return data
@@ -2589,7 +2869,8 @@ def show_data():
             tree.delete(*tree.get_children())
             for row in data:
                 tree.insert('', 'end', values=row)
-        tree.pack()
+        tree.grid(in_=tree_frame, row=0, column=0, sticky='nsew')
+        tree['height'] = 20
         tree.bind("<Double-1>", onDoubleClick)
 
 
@@ -2602,7 +2883,8 @@ def show_data():
     for row in data:
         tree.insert('', 'end', values=row)
     
-    tree.pack()
+    tree.grid(in_=tree_frame, row=0, column=0, sticky='nsew')
+    tree['height'] = 20
     tree.bind("<Double-1>", onDoubleClick)
     tree.bind("<Delete>",onDel)
 
