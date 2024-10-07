@@ -1,0 +1,43 @@
+# GUI libraries
+tkinter  # Built-in with Python
+
+# Database
+sqlite3  # Built-in with Python
+pyodbc==4.0.32  # For ODBC database connections
+
+# GUI enhancement for better theming
+ttkbootstrap==1.8.0
+
+# Working with dates and times
+python-dateutil==2.8.2
+
+# Word document processing
+python-docx==0.8.11
+docxtpl==0.16
+
+# PDF handling
+pdf2image==1.16.3
+
+# Image manipulation
+Pillow==9.0.1
+
+# Environmental variables management
+python-dotenv==0.21.0
+
+# Web automation
+selenium==4.1.0
+
+# GUI automation
+pyautogui==0.9.53
+
+# HTTP requests
+requests==2.26.0
+
+# Windows-specific dependencies for interacting with COM clients like Outlook
+pywin32==302
+
+# Browser Drivers (Optional, if needed for Selenium)
+webdriver-manager==3.5.2
+
+# Regex
+regex==2021.8.3
