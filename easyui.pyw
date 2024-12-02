@@ -25,9 +25,11 @@ import pyautogui
 import time
 import re
 from urllib.parse import quote_plus
+from openai import OpenAI
+
 
 # Main Configuration
-
+client = OpenAI()
 database = r'.\database.db'
 icon = r'.\free.ico'
 text_padding = 5
@@ -86,6 +88,32 @@ var_codes = {
 
 
 #UTILITY FUNCTIONS
+def format_description(text):
+    instruction = (
+        "You are tasked with synthesizing coastal construction project descriptions into concise, professional paragraph summaries, "
+        "emphasizing impacts and mitigation for wetlands and waterbottoms. Each summary follows this format: "
+        "1) Start with: 'The applicant proposes to...' "
+        "2) Provide a clear, brief project description. "
+        "3) End with the location in the format: '[County], Alabama.' "
+        "Maintain a professional tone."
+    )
+    try:
+        response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": instruction},
+            {
+                "role": "user",
+                "content": text
+            }
+        ]
+    )
+        formatted_text = response.choices[0].message.content
+        print(formatted_text)
+    except:
+        formatted_text = 'Error'
+    return formatted_text
+
 def toggle_dark_mode():
     conn = sqlite3.connect(database)
     c = conn.cursor()
@@ -141,7 +169,7 @@ def delete_previous_word2(event):
         # Delete from the beginning of the line if start_index < 0
         widget.delete(f"{line}.0", current_index)
 
-def render_document(template, context, acamp, sam="", county="",perm_type="", doc_type=""):
+def render_document(template, context, acamp, sam="", county="",perm_type="", doc_type="", selected_images=None):
     template.render(context)
     if county.lower() == 'mobile':
         countynum = ' 097'
@@ -158,6 +186,17 @@ def render_document(template, context, acamp, sam="", county="",perm_type="", do
     else:
         filename =r'.\output\xxx ' + acamp +' '+ countynum +' ' +str(date)+ ' ' + perm_type +' '+ sam +' '+ doc_type +'.docx'
     template.save(filename.format(acamp))
+
+    if doc_type == "Inspection Report" and selected_images:
+        try:
+            # Open the saved document to append images
+            doc = Document(filename)
+            add_images_to_document(doc, selected_images)
+            doc.save(filename)
+        except Exception as e:
+            print(f"Error while adding images: {e}")
+    
+    # Open the generated file
     open_file(filename)
 
 def send_email(subject_data, to_data, body_data):
@@ -313,6 +352,8 @@ def findPID(address, city, county, widget):
         else:
             print(f"Failed to fetch data. Status code: {response1.status_code}")
 
+
+
 def openFolder():
     os.startfile(os.path.normpath(output_path))
 
@@ -328,6 +369,23 @@ def open_file_dialog():
         c.execute(sql, (folder_path,))
         conn.commit()
         conn.close()  
+
+selected_images = []  # Initialize as an empty list
+
+def open_file_dialog_insp():
+    global selected_images
+    selected_images = filedialog.askopenfilenames(
+        title="Select Images",
+        filetypes=[("Image Files", "*.png;*.jpg;*.jpeg;*.bmp;*.gif")],
+    )
+
+
+def add_images_to_document(document, images):
+    for image in images:
+        try:
+            document.add_picture(image, width=Inches(4))
+        except Exception as e:
+            print(f"Error adding image {image}: {e}")
         
 
 
@@ -456,6 +514,22 @@ def open_pnotinput_window():
     project_description.bind("<Control-BackSpace>", delete_previous_word2)
     project_description.pack(padx=text_padding, pady=text_padding)
 
+    def replace_field(widget,text):
+        if text != None:
+            if isinstance(widget, ttk.Entry):
+                widget.delete(0,tk.END)
+                widget.insert(0,text)
+            else:
+                widget.delete(1.0,tk.END)
+                widget.insert(1.0,text)
+        else:
+            if isinstance(widget, ttk.Entry):
+                widget.insert(0,"")
+            else:
+                widget.insert(1.0,"")
+
+    summary_button = ttk.Button(right_frame, text="Summarize", command= lambda: replace_field(project_description, format_description(project_description.get(1.0, ttk.END))))
+    summary_button.pack(padx=text_padding, pady=text_padding)
     submit_button = ttk.Button(right_frame, text="Submit", command=lambda: get_pnot_values(acamp.get(), sam.get(), project_name.get(), project_address.get(), project_city.get(), project_county.get(), project_description.get(1.0, ttk.END), var_code.get(), parcel_id.get(), federal_agency.get()))
     submit_button.pack(padx=text_padding, pady=text_padding)
 
@@ -679,11 +753,14 @@ def open_perminput_window():
     global prefile_date, notice_type, pnot_date, jpn_date
     global ext_number_label, ext_number, gpm_label, gpm
     global fed_label, fed
+    global var_desc
+
+    var_desc = ''
 
     perm1 = ttk.Toplevel()
     perm1.iconbitmap(icon)
     perm1.title("ADEM Coastal Document Genie")
-    perm1.bind('<Return>', lambda event: get_perm_values(acamp.get(), sam.get(), honorific.get(), first_name.get(), last_name.get(), project_address.get(), title.get(), agent_name.get(), agent_address.get(), city.get(), state.get(), zip.get(), project_name.get(), project_city.get(), project_county.get(), parcel_id.get(), prefile_date.get(), notice_type.get(), jpn_date.get(), pnot_date.get(), project_description.get(1.0, ttk.END), fee_amount.get(), fee_received.get(), adem_employee.get(), adem_email.get(),exp_date.get(), exp_date1.get(), npdes_date.get(), npdes_num.get(), parcel_size.get(), var_code.get(),ext_number.get, gpm.get(), fed.get()))
+    perm1.bind('<Return>', lambda event: get_perm_values(acamp.get(), sam.get(), honorific.get(), first_name.get(), last_name.get(), project_address.get(), title.get(), agent_name.get(), agent_address.get(), city.get(), state.get(), zip.get(), project_name.get(), project_city.get(), project_county.get(), parcel_id.get(), prefile_date.get(), notice_type.get(), jpn_date.get(), pnot_date.get(), project_description.get(1.0, ttk.END), fee_amount.get(), fee_received.get(), adem_employee.get(), adem_email.get(),exp_date.get(), exp_date1.get(), npdes_date.get(), npdes_num.get(), parcel_size.get(), var_code.get(), var_desc, ext_number.get, gpm.get(), fed.get()))
 
     left_frame = ttk.Frame(perm1, )
     left_frame.pack(side=ttk.LEFT)
@@ -925,13 +1002,14 @@ def open_perminput_window():
 
             drop2 = ttk.OptionMenu( right_frame, clicked2, *var_list)
             drop2.pack(padx=text_padding, pady=text_padding)
-
             def callback3(*args):
+                
                 for var in var_codes:
                     for i in var_list:
                         if clicked2.get() == var_codes.get(var)[0]:
                             var_code.delete(0,ttk.END)
                             var_code.insert(0, var_codes.get(var)[1])
+                            var_desc = var_codes.get(var)[0]
                 
 
             clicked2.trace("w", callback3)
@@ -973,7 +1051,19 @@ def open_perminput_window():
     fee_received.bind("<Control-BackSpace>", delete_previous_word)
     fee_received.pack(padx=text_padding, pady=text_padding)
 
-    
+    def replace_field(widget,text):
+        if text != None:
+            if isinstance(widget, ttk.Entry):
+                widget.delete(0,tk.END)
+                widget.insert(0,text)
+            else:
+                widget.delete(1.0,tk.END)
+                widget.insert(1.0,text)
+        else:
+            if isinstance(widget, ttk.Entry):
+                widget.insert(0,"")
+            else:
+                widget.insert(1.0,"")
         
 
     project_description_label = ttk.Label(right_frame, text="Project Description:")
@@ -981,6 +1071,9 @@ def open_perminput_window():
     project_description = ttk.Text(right_frame)
     project_description.bind("<Control-BackSpace>", delete_previous_word2)
     project_description.pack(padx=text_padding, pady=text_padding)
+
+    summary_button = ttk.Button(right_frame, text="Summarize", command= lambda: replace_field(project_description, format_description(project_description.get(1.0, ttk.END))))
+    summary_button.pack(padx=text_padding, pady=text_padding)
     
     get_data3()
 
@@ -1004,18 +1097,18 @@ def open_perminput_window():
         data = c.fetchall()
         adem_pronoun = data[0][0]
         print(adem_pronoun)
-        get_perm_values(acamp.get(), sam.get(), honorific.get(), first_name.get(), last_name.get(), project_address.get(), title.get(), agent_name.get(), agent_address.get(), city.get(), state.get(), zip.get(), project_name.get(), project_city.get(), project_county.get(), parcel_id.get(), prefile_date.get(), notice_type.get(), jpn_date.get(), pnot_date.get(), project_description.get(1.0, ttk.END), fee_amount.get(), fee_received.get(), adem_employee.get(), adem_email.get(),exp_date.get(), exp_date1.get(), npdes_date.get(), npdes_num.get(), parcel_size.get(),var_code.get(), ext_number.get(), gpm.get(), fed.get())
+        get_perm_values(acamp.get(), sam.get(), honorific.get(), first_name.get(), last_name.get(), project_address.get(), title.get(), agent_name.get(), agent_address.get(), city.get(), state.get(), zip.get(), project_name.get(), project_city.get(), project_county.get(), parcel_id.get(), prefile_date.get(), notice_type.get(), jpn_date.get(), pnot_date.get(), project_description.get(1.0, ttk.END), fee_amount.get(), fee_received.get(), adem_employee.get(), adem_email.get(),exp_date.get(), exp_date1.get(), npdes_date.get(), npdes_num.get(), parcel_size.get(),var_code.get(), var_desc, ext_number.get(), gpm.get(), fed.get())
 
     submit_button = ttk.Button(right_frame, text="Submit", command=lambda: get_pronoun())
     submit_button.pack(padx=text_padding, pady=text_padding)
  
-def get_perm_values(acamp, sam, honorific, first_name, last_name, project_address, title, agent_name, agent_address, city, state, zip, project_name, project_city, project_county, parcel_id, prefile_date, notice_type, jpn_date, pnot_date, project_description, fee_amount, fee_received, adem_employee, adem_email, exp_date, exp_date1, npdes_date, npdes_num, parcel_size, var_code, ext_number, gpm, fed):
+def get_perm_values(acamp, sam, honorific, first_name, last_name, project_address, title, agent_name, agent_address, city, state, zip, project_name, project_city, project_county, parcel_id, prefile_date, notice_type, jpn_date, pnot_date, project_description, fee_amount, fee_received, adem_employee, adem_email, exp_date, exp_date1, npdes_date, npdes_num, parcel_size, var_code, var_desc, ext_number, gpm, fed):
     if permtype == "IP":
         perm_IP(acamp, sam, honorific, first_name, last_name, project_address, title, agent_name, agent_address, city, state, zip, project_name, project_city, project_county, parcel_id, prefile_date, notice_type, jpn_date, pnot_date, project_description, fee_amount, fee_received, adem_employee, adem_email)
     elif permtype == "LOP":
         perm_LOP(acamp, sam, honorific, first_name, last_name, project_address, title, agent_name, agent_address, city, state, zip, project_name, project_city, project_county, parcel_id, prefile_date, notice_type, jpn_date, pnot_date, project_description, fee_amount, fee_received, adem_employee, adem_email)
     elif permtype == "VAR":
-        perm_VAR(acamp, sam, honorific, first_name, last_name, project_address, title, agent_name, agent_address, city, state, zip, project_name, project_city, project_county, parcel_id, prefile_date, notice_type, jpn_date, pnot_date, project_description, fee_amount, fee_received, adem_employee, adem_email,var_code)
+        perm_VAR(acamp, sam, honorific, first_name, last_name, project_address, title, agent_name, agent_address, city, state, zip, project_name, project_city, project_county, parcel_id, prefile_date, notice_type, jpn_date, pnot_date, project_description, fee_amount, fee_received, adem_employee, adem_email,var_code, var_desc)
     elif permtype == "NRU":
         perm_NRU(acamp, sam, honorific, first_name, last_name, project_address, title, agent_name, agent_address, city, state, zip, project_name, project_city, project_county, parcel_id, prefile_date, notice_type, jpn_date, pnot_date, project_description, fee_amount, fee_received, adem_employee, adem_email, npdes_date,npdes_num)
     elif permtype == "401":
@@ -1438,7 +1531,7 @@ Thank you!
     render_document(templatePerm1, context, acamp, sam, county=project_county ,perm_type="CZCERT", doc_type="401WQ")
     render_document(templateRat,context,acamp,sam,project_county,"CZCERT","RATIONALE")
     
-def perm_VAR(acamp, sam, honorific, first_name, last_name, project_address, title, agent_name, agent_address, city, state, zip, project_name, project_city, project_county, parcel_id, prefile_date, notice_type, jpn_date, pnot_date, project_description, fee_amount, fee_received, adem_employee, adem_email,var_code):
+def perm_VAR(acamp, sam, honorific, first_name, last_name, project_address, title, agent_name, agent_address, city, state, zip, project_name, project_city, project_county, parcel_id, prefile_date, notice_type, jpn_date, pnot_date, project_description, fee_amount, fee_received, adem_employee, adem_email,var_code, var_desc):
     # Import template document
     templatePerm1 = DocxTemplate('templates/LOPW_Temp.docx')
     templatePerm2 = DocxTemplate('templates/VARC_Temp.docx')
@@ -1473,9 +1566,10 @@ def perm_VAR(acamp, sam, honorific, first_name, last_name, project_address, titl
         'Fee_Received': fee_received,
         'ADEM_Employee': adem_employee,
         'ADEM_Email': adem_email,
-        'var_code': var_code
+        'Variance_Codes': var_code,
+        'Variance_Desc': var_desc
     }
-
+    print(f"Variance Description: {var_desc}")
     insert_data(acamp, context)
     agent = {
         'name': agent_name,
@@ -1502,7 +1596,7 @@ Permitee Name: {project_name}
 Permit Number: ACAMP-{acamp}
 Initial Application
 Date application received: {prefile_date}
-Facility Name: None – Single Family Home
+Facility Name: 
 Parcel Number(s): {parcel_id}
 Facility Address: {project_address}
 Latitude/Longitude: 
@@ -1773,8 +1867,8 @@ def get_inspr_values():
         'ADEM_Email': adem_email.get()}
     insert_data(acamp.get(), context)
     # Render automated report
-    render_document(template,context,context.get('ACAMP_Number'),context.get('SAM_Number'),"","","Inspection Report")
-    perm.destroy()
+    render_document(template,context,context.get('ACAMP_Number'),context.get('SAM_Number'),context.get('Project_County'),"","Inspection Report", selected_images)
+    inspr.destroy()
 # Inspection Report Window
 def open_inspr_window():
     # Inspection Report Window
@@ -1932,6 +2026,31 @@ def open_inspr_window():
     comments.bind("<Control-BackSpace>", delete_previous_word2)
     comments.pack(padx=text_padding, pady=text_padding)
 
+    images_label = ttk.Label(inspr, text="Selected Images")
+    images_label.pack(padx=text_padding, pady=text_padding)
+    scrollbar = ttk.Scrollbar(inspr)
+    images = ttk.Treeview(inspr,yscrollcommand=scrollbar.set, show="tree")
+    scrollbar.configure(command=images.yview)
+    scrollbar.pack(side="right", fill="y")
+    images.pack(side="left", fill="both", expand=True)
+
+    def update_treeview():
+        # Clear the Treeview
+        images.delete(*images.get_children())
+        
+        # Populate the Treeview with the selected images
+        for image_path in selected_images:
+            filename = os.path.basename(image_path)
+            images.insert("", "end", text=filename)
+
+    # Function to handle selecting images and updating the Treeview
+    def select_images():
+        selected_images = open_file_dialog_insp()
+        update_treeview()
+
+    # Button to select images
+    image_button = ttk.Button(inspr, text="Select Images", command=select_images)
+    image_button.pack(padx=text_padding, pady=text_padding)
     
     # Button to retrieve input values
     submit_button = ttk.Button(right_frame, text="Submit", command=get_pronoun)
@@ -2520,6 +2639,8 @@ def insert_agent_data(agent_name, data):
 def show_data():
     data = ttk.Toplevel()
     data.geometry('600x400')  # Set the initial size of the window
+    data.iconbitmap(icon)
+    data.title("ADEM Coastal Document Genie")
     data.grid_rowconfigure(1, weight=1)  # Configure the second row to expand
     data.grid_columnconfigure(0, weight=1)  # Configure the column to expand
 
@@ -2554,9 +2675,13 @@ def show_data():
         tree.heading(column,anchor=tk.W)
     
     tree.column('#0', width=0, stretch=tk.NO)
-    scrollbar = ttk.Scrollbar(tree_frame, orient=tk.VERTICAL, command=tree.yview)
-    tree.configure(yscroll=scrollbar)
+    scrollbar = ttk.Scrollbar(tree_frame, orient="vertical", command=tree.yview)
+    scrollbar.grid(row=0, column=1, sticky="ns")
+
+    tree.configure(yscrollcommand=scrollbar.set)
+    tree.grid(row=0, column=0, sticky="nsew")
     
+
 
     def replace_field(widget,text):
         if text != None:
