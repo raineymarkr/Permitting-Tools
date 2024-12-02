@@ -1,30 +1,24 @@
 import tkinter as tk
 from tkinter import filedialog
 import ttkbootstrap as ttk
-import pyodbc
 import datetime
 import subprocess
 import sqlite3
 import os
 from dotenv import load_dotenv
-from docx.shared import Cm
 from docx.shared import Inches
-from docxtpl import DocxTemplate, InlineImage
+from docxtpl import DocxTemplate
 from docx import Document
-from PIL import ImageTk, Image
-from pdf2image import convert_from_path
 import win32com.client
-import requests, json
+import requests
 import urllib
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as ec
-from selenium.webdriver.common.action_chains import ActionChains
 import pyautogui
 import time
 import re
-from urllib.parse import quote_plus
 from openai import OpenAI
 
 
@@ -88,13 +82,14 @@ var_codes = {
 
 
 #UTILITY FUNCTIONS
+
+#GPT Formatting for Project Descriptions
 def format_description(text):
     instruction = (
         "You are tasked with synthesizing coastal construction project descriptions into concise, professional paragraph summaries, "
         "emphasizing impacts and mitigation for wetlands and waterbottoms. Each summary follows this format: "
         "1) Start with: 'The applicant proposes to...' "
         "2) Provide a clear, brief project description. "
-        "3) End with the location in the format: '[County], Alabama.' "
         "Maintain a professional tone."
     )
     try:
@@ -109,11 +104,36 @@ def format_description(text):
         ]
     )
         formatted_text = response.choices[0].message.content
-        print(formatted_text)
     except:
         formatted_text = 'Error'
     return formatted_text
 
+def format_description_inspr(text):
+    instruction = (
+        "You are tasked with synthesizing coastal inspection reports into concise, professional paragraph summaries, "
+        "emphasizing impacts and mitigation for wetlands and waterbottoms. Each summary follows this format: "
+        "1) Start with: 'The purpose of this inspection was to...' "
+        "2) Provide a clear, brief description of the purpose of inspection and any findings. "
+        "3) Be concise. Do not offer solutions or make definitive statements."
+        "Maintain a professional tone."
+    )
+    try:
+        response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": instruction},
+            {
+                "role": "user",
+                "content": text
+            }
+        ]
+    )
+        formatted_text = response.choices[0].message.content
+    except:
+        formatted_text = 'Error'
+    return formatted_text
+
+#This function toggles the app between light and dark mode by updating the setting in app database
 def toggle_dark_mode():
     conn = sqlite3.connect(database)
     c = conn.cursor()
@@ -130,9 +150,11 @@ def toggle_dark_mode():
     conn.commit()
     conn.close()
 
+#For opening documents after generation
 def open_file(filename):
     subprocess.Popen(["start",'', filename], shell=True)
 
+#Deletes previous word in text fields
 def delete_previous_word(event):
     widget = event.widget
     current_text = widget.get()
@@ -147,6 +169,7 @@ def delete_previous_word(event):
     # Delete the previous word
     widget.delete(start_index + 1, current_index)
 
+#Deletes previous word in text boxes
 def delete_previous_word2(event):
     widget = event.widget
     current_index = widget.index(tk.INSERT)
@@ -169,6 +192,7 @@ def delete_previous_word2(event):
         # Delete from the beginning of the line if start_index < 0
         widget.delete(f"{line}.0", current_index)
 
+#Renders documents in docx format
 def render_document(template, context, acamp, sam="", county="",perm_type="", doc_type="", selected_images=None):
     template.render(context)
     if county.lower() == 'mobile':
@@ -199,6 +223,7 @@ def render_document(template, context, acamp, sam="", county="",perm_type="", do
     # Open the generated file
     open_file(filename)
 
+#Places email in draft box
 def send_email(subject_data, to_data, body_data):
     outlook = win32com.client.Dispatch("Outlook.Application")
     namespace = outlook.getNamespace("MAPI")
@@ -218,6 +243,7 @@ def send_email(subject_data, to_data, body_data):
 
 load_dotenv()
 
+#Makes API call to find zipcode of project
 def find_zip(address, city):
     zip_API = os.getenv("ZIP_API_KEY")
     params = {
@@ -249,6 +275,7 @@ def find_zip(address, city):
         zip = ''
     return zip
 
+#Depending on county, either uses API call or web scraping to find PID number
 def findPID(address, city, county, widget):
     global x_coordinate 
     global y_coordinate 
@@ -353,10 +380,11 @@ def findPID(address, city, county, widget):
             print(f"Failed to fetch data. Status code: {response1.status_code}")
 
 
-
+#Opens file explorer at specified path
 def openFolder():
     os.startfile(os.path.normpath(output_path))
 
+#Opens file dialog to set output path
 def open_file_dialog():
     folder_path = filedialog.askdirectory()
     global output_path
@@ -370,8 +398,11 @@ def open_file_dialog():
         conn.commit()
         conn.close()  
 
+#Below are used to choose inspection report photos for insertion into report
+#Define list of images selected
 selected_images = []  # Initialize as an empty list
 
+#Open file dialog to choose photos
 def open_file_dialog_insp():
     global selected_images
     selected_images = filedialog.askopenfilenames(
@@ -379,7 +410,7 @@ def open_file_dialog_insp():
         filetypes=[("Image Files", "*.png;*.jpg;*.jpeg;*.bmp;*.gif")],
     )
 
-
+# Adds each photo to document
 def add_images_to_document(document, images):
     for image in images:
         try:
@@ -2016,15 +2047,56 @@ def open_inspr_window():
         c.execute("SELECT Pronoun FROM settings WHERE Name = ?", (adem_employee.get(),))
         data = c.fetchall()
         adem_pronoun = data[0][0]
-        print(adem_pronoun)
         get_inspr_values()
 
+    def replace_field(widget,text):
+        if text != None:
+            if isinstance(widget, ttk.Entry):
+                widget.delete(0,tk.END)
+                widget.insert(0,text)
+            else:
+                widget.delete(1.0,tk.END)
+                widget.insert(1.0,text)
+        else:
+            if isinstance(widget, ttk.Entry):
+                widget.insert(0,"")
+            else:
+                widget.insert(1.0,"")
 
     comments_label = ttk.Label(inspr, text="Comments/Site Observations:")
     comments_label.pack(padx=text_padding, pady=text_padding)
     comments = ttk.Text(inspr)
     comments.bind("<Control-BackSpace>", delete_previous_word2)
     comments.pack(padx=text_padding, pady=text_padding)
+
+    summary_button = ttk.Button(inspr, text="Summarize", command= lambda: replace_field(comments, format_description_inspr(comments.get(1.0, ttk.END))))
+    summary_button.pack(padx=text_padding, pady=text_padding)
+
+    def onDel(event):
+        global selected_images
+        selected_images  = list(selected_images)
+        try:
+            items = images.selection()
+            for item in items:
+                index = images.index(item)
+                del selected_images[index]
+                images.delete(item)
+        except IndexError:
+            print("No item selected.")
+        except Exception as e:
+            print("An error occurred:", e)
+        selected_images = tuple(selected_images)
+        print(selected_images)
+    
+    def onClick(event):
+        try:
+            item = images.selection()[0]
+            index = images.index(item)
+            open_file(selected_images[index])
+        except IndexError:
+            print("No item selected.")
+        except Exception as e:
+            print("An error occurred:", e)
 
     images_label = ttk.Label(inspr, text="Selected Images")
     images_label.pack(padx=text_padding, pady=text_padding)
@@ -2033,6 +2105,8 @@ def open_inspr_window():
     scrollbar.configure(command=images.yview)
     scrollbar.pack(side="right", fill="y")
     images.pack(side="left", fill="both", expand=True)
+    images.bind("<Delete>", onDel)
+    images.bind("<Double-1>", onClick)
 
     def update_treeview():
         # Clear the Treeview
@@ -2047,6 +2121,8 @@ def open_inspr_window():
     def select_images():
         selected_images = open_file_dialog_insp()
         update_treeview()
+
+    
 
     # Button to select images
     image_button = ttk.Button(inspr, text="Select Images", command=select_images)
